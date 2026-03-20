@@ -172,7 +172,7 @@ export function buildMoveRecords(record: GameRecord): MoveRecord[] {
     const tokens = startFen.trim().split(/\s+/);
     const placement = tokens[0];
     const side = tokens[1];
-    // Standard placement + w: ignore FEN castling/ep quirks so Zobrist matches explorer `startPositionHash()`.
+    // Standard placement + w: ignore FEN castling/ep quirks so Zobrist matches `startPositionHash()`.
     const useEngineDefaultStart =
       placement === STANDARD_START_PLACEMENT && side === "w";
     if (!useEngineDefaultStart) {

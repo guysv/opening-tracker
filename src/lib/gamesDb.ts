@@ -2,7 +2,7 @@ import pgnParser from "pgn-parser";
 
 import { isStandardImportStart } from "./startFen";
 
-const DB_NAME = "openingExplorer";
+const DB_NAME = "openingTracker";
 const DB_VERSION = 3;
 const GAMES_STORE = "games";
 const MOVES_STORE = "moves";

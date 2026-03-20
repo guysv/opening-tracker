@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 
 import { clearGamesStore } from "../lib/gamesDb";
 import type { ImportActivitySnapshot } from "./ImportStatusPanel";
-import { OpeningExplorer } from "./OpeningExplorer";
+import { OpeningTracker } from "./OpeningTracker";
 import { Sidebar } from "./Sidebar";
 
 type WorkerResponse =
@@ -151,7 +151,7 @@ export function App() {
         onImport={handleImport}
         onClear={handleCleanDb}
       />
-      <OpeningExplorer />
+      <OpeningTracker />
     </div>
   );
 }

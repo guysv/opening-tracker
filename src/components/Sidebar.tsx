@@ -26,7 +26,7 @@ export function Sidebar({
 
   return (
     <aside class="sidebar">
-      <h2>Opening Explorer</h2>
+      <h2>Opening Tracker</h2>
       <form class="import-form" onSubmit={handleSubmit}>
         <label class="field">
           <span>chess.com username</span>

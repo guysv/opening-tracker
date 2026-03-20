@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "personal-opening-explorer",
+      "name": "opening-tracker",
       "dependencies": {
         "bitboard-chess": "^0.4.0",
         "pgn-parser": "^2.2.1",

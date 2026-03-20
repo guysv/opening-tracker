@@ -44,7 +44,7 @@ function ResultBar({ move }: { move: AggregatedMove }) {
   );
 }
 
-export function OpeningExplorer() {
+export function OpeningTracker() {
   const loc = useExplorerLocation();
   const [moves, setMoves] = useState<AggregatedMove[]>([]);
   const [colorFilter, setColorFilter] = useState<ColorFilter>("w");
