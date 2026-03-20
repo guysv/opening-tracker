@@ -10,7 +10,8 @@ const server = Bun.serve({
         new ReadableStream({
           start(controller) {
             const id = setInterval(() => {
-              controller.enqueue(`data: ping\n\n`);
+              // Keep the SSE connection alive without triggering onmessage handlers.
+              controller.enqueue(`event: ping\ndata: keepalive\n\n`);
             }, 1000);
             req.signal.addEventListener("abort", () => clearInterval(id));
           },
@@ -42,7 +43,7 @@ const server = Bun.serve({
         const html = await file.text();
         const injected = html.replace(
           "</body>",
-          `<script>new EventSource("/__reload").onmessage=()=>location.reload()</script></body>`,
+          `<script>new EventSource("/__reload").addEventListener("reload",()=>location.reload())</script></body>`,
         );
         body = new Response(injected, { headers: { "Content-Type": "text/html" } });
       }
@@ -55,7 +56,7 @@ const server = Bun.serve({
       const html = await index.text();
       const injected = html.replace(
         "</body>",
-        `<script>new EventSource("/__reload").onmessage=()=>location.reload()</script></body>`,
+        `<script>new EventSource("/__reload").addEventListener("reload",()=>location.reload())</script></body>`,
       );
       return new Response(injected, { headers: { "Content-Type": "text/html" } });
     }
