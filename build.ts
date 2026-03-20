@@ -5,7 +5,11 @@ const startMs = performance.now();
 await $`rm -rf dist`;
 
 const result = await Bun.build({
-  entrypoints: ["src/index.html", "src/workers/gameImport.worker.ts"],
+  entrypoints: [
+    "src/index.html",
+    "src/workers/gameImport.worker.ts",
+    "src/workers/gameParse.worker.ts",
+  ],
   outdir: "dist",
   minify: true,
   splitting: true,

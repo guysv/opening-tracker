@@ -1,4 +1,10 @@
-import { toGameRecord, type ChessArchiveGame, upsertGames } from "../lib/gamesDb";
+import {
+  toGameRecord,
+  upsertGamesWithMoves,
+  type ChessArchiveGame,
+  type GameRecord,
+  type MoveRecord,
+} from "../lib/gamesDb";
 
 type ImportRequestMessage = {
   type: "IMPORT_LATEST_ARCHIVE";
@@ -21,6 +27,22 @@ type ImportErrorMessage = {
   type: "IMPORT_ERROR";
   payload: {
     message: string;
+  };
+};
+
+type ImportProgressMessage = {
+  type: "IMPORT_PROGRESS";
+  payload:
+    | { phase: "download"; current: number; total: number }
+    | { phase: "parse"; current: number; total: number }
+    | { phase: "save" };
+};
+
+type ParseBatchResultMessage = {
+  type: "PARSE_BATCH_RESULT";
+  payload: {
+    requestId: number;
+    results: { gameId: string; moves: MoveRecord[] }[];
   };
 };
 
@@ -50,6 +72,103 @@ function postError(message: string): void {
   self.postMessage(payload);
 }
 
+function postProgress(progress: ImportProgressMessage["payload"]): void {
+  const payload: ImportProgressMessage = { type: "IMPORT_PROGRESS", payload: progress };
+  self.postMessage(payload);
+}
+
+function parsePoolSize(recordCount: number): number {
+  const hw =
+    typeof navigator !== "undefined" && navigator.hardwareConcurrency
+      ? navigator.hardwareConcurrency
+      : 4;
+  return Math.max(1, Math.min(recordCount, hw));
+}
+
+function shardRoundRobin(records: GameRecord[], poolSize: number): GameRecord[][] {
+  const chunks: GameRecord[][] = Array.from({ length: poolSize }, () => []);
+  for (let i = 0; i < records.length; i++) {
+    chunks[i % poolSize]!.push(records[i]!);
+  }
+  return chunks;
+}
+
+async function parseRecordsWithWorkerPool(records: GameRecord[]): Promise<Map<string, MoveRecord[]>> {
+  const map = new Map<string, MoveRecord[]>();
+
+  if (records.length === 0) {
+    postProgress({ phase: "parse", current: 0, total: 0 });
+    return map;
+  }
+
+  postProgress({ phase: "parse", current: 0, total: records.length });
+
+  const poolSize = parsePoolSize(records.length);
+  const chunks = shardRoundRobin(records, poolSize);
+  const workers: Worker[] = [];
+  let parsedCount = 0;
+
+  try {
+    const promises = chunks.map(
+      (games, workerIndex) =>
+        new Promise<{ gameId: string; moves: MoveRecord[] }[]>((resolve, reject) => {
+          if (games.length === 0) {
+            resolve([]);
+            return;
+          }
+
+          const worker = new Worker(new URL("./gameParse.worker.js", import.meta.url), {
+            type: "module",
+          });
+          workers.push(worker);
+
+          worker.onmessage = (event: MessageEvent<ParseBatchResultMessage>) => {
+            const data = event.data;
+            if (
+              data?.type === "PARSE_BATCH_RESULT" &&
+              data.payload?.requestId === workerIndex
+            ) {
+              resolve(data.payload.results);
+            }
+          };
+
+          worker.onerror = (ev: Event) => {
+            const e = ev as ErrorEvent;
+            const detail = e.message?.trim() || "unknown error";
+            reject(new Error(`Parse worker failed: ${detail}`));
+          };
+
+          try {
+            worker.postMessage({
+              type: "PARSE_BATCH",
+              payload: { requestId: workerIndex, games },
+            });
+          } catch (postErr) {
+            reject(postErr instanceof Error ? postErr : new Error(String(postErr)));
+          }
+        }).then((results) => {
+          parsedCount += results.length;
+          postProgress({ phase: "parse", current: parsedCount, total: records.length });
+          return results;
+        }),
+    );
+
+    const parts = await Promise.all(promises);
+
+    for (const part of parts) {
+      for (const { gameId, moves } of part) {
+        map.set(gameId, moves);
+      }
+    }
+  } finally {
+    for (const w of workers) {
+      w.terminate();
+    }
+  }
+
+  return map;
+}
+
 self.onmessage = async (event: MessageEvent<ImportRequestMessage>) => {
   console.log("Received message:", event.data);
 
@@ -77,7 +196,9 @@ self.onmessage = async (event: MessageEvent<ImportRequestMessage>) => {
     const paths = getArchivePathsForMonthsBack(monthsBack);
     const allGames: ChessArchiveGame[] = [];
 
-    for (const archivePath of paths) {
+    for (let i = 0; i < paths.length; i++) {
+      const archivePath = paths[i]!;
+      postProgress({ phase: "download", current: i + 1, total: paths.length });
       const archiveUrl = `https://api.chess.com/pub/player/${normalizedUsername}/games/${archivePath}`;
       console.log(`Fetching archive: ${archiveUrl}`);
       const response = await fetch(archiveUrl);
@@ -113,7 +234,14 @@ self.onmessage = async (event: MessageEvent<ImportRequestMessage>) => {
 
     console.log(`Mapped ${records.length} valid records from ${monthsBack} month(s).`);
 
-    await upsertGames(records);
+    const movesByGame = await parseRecordsWithWorkerPool(records);
+    const entries = records.map((record) => ({
+      record,
+      moves: movesByGame.get(record.uuid) ?? [],
+    }));
+
+    postProgress({ phase: "save" });
+    await upsertGamesWithMoves(entries);
 
     const payload: ImportSuccessMessage = {
       type: "IMPORT_SUCCESS",

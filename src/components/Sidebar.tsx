@@ -1,11 +1,14 @@
+import { ImportStatusPanel, type ImportActivitySnapshot } from "./ImportStatusPanel";
 import { StorageEstimatePanel } from "./StorageEstimatePanel";
 
 type SidebarProps = {
+  importActivity: ImportActivitySnapshot | null;
   onImport: (username: string, monthsBack: number) => void;
   onClear: () => void;
 };
 
 export function Sidebar({
+  importActivity,
   onImport,
   onClear,
 }: SidebarProps) {
@@ -49,6 +52,8 @@ export function Sidebar({
           Clean IndexedDB
         </button>
       </form>
+
+      {importActivity ? <ImportStatusPanel activity={importActivity} /> : null}
 
       <StorageEstimatePanel />
     </aside>

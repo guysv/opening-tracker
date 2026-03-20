@@ -21,7 +21,11 @@ const server = Bun.serve({
     }
 
     const result = await Bun.build({
-      entrypoints: ["src/index.html", "src/workers/gameImport.worker.ts"],
+      entrypoints: [
+        "src/index.html",
+        "src/workers/gameImport.worker.ts",
+        "src/workers/gameParse.worker.ts",
+      ],
       outdir: "dist",
       sourcemap: "inline",
     });

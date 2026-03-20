@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 
 import { clearGamesStore } from "../lib/gamesDb";
+import type { ImportActivitySnapshot } from "./ImportStatusPanel";
 import { MainContent } from "./MainContent";
 import { Sidebar } from "./Sidebar";
 
@@ -18,10 +19,20 @@ type WorkerResponse =
       payload: {
         message: string;
       };
+    }
+  | {
+      type: "IMPORT_PROGRESS";
+      payload:
+        | { phase: "download"; current: number; total: number }
+        | { phase: "parse"; current: number; total: number }
+        | { phase: "save" };
     };
 
 export function App() {
   const [status, setStatus] = useState("Ready to import games.");
+  const [importActivity, setImportActivity] = useState<ImportActivitySnapshot | null>(
+    null,
+  );
   const worker = useMemo(
     () =>
       new Worker(new URL("../workers/gameImport.worker.js", import.meta.url), {
@@ -36,6 +47,7 @@ export function App() {
 
       if (message.type === "IMPORT_SUCCESS") {
         const { username, importedCount, monthsBack } = message.payload;
+        setImportActivity(null);
         setStatus(
           `Imported ${importedCount} games for ${username} (last ${monthsBack} month${monthsBack === 1 ? "" : "s"}).`,
         );
@@ -43,7 +55,40 @@ export function App() {
       }
 
       if (message.type === "IMPORT_ERROR") {
+        setImportActivity(null);
         setStatus(`Import failed: ${message.payload.message}`);
+        return;
+      }
+
+      if (message.type === "IMPORT_PROGRESS") {
+        const p = message.payload;
+        setImportActivity((prev) => {
+          const base: ImportActivitySnapshot = prev ?? {
+            downloadCurrent: 0,
+            downloadTotal: 0,
+            parseCurrent: null,
+            parseTotal: null,
+            saving: false,
+          };
+          if (p.phase === "download") {
+            return {
+              ...base,
+              downloadCurrent: p.current,
+              downloadTotal: p.total,
+              saving: false,
+            };
+          }
+          if (p.phase === "parse") {
+            return {
+              ...base,
+              downloadCurrent: base.downloadTotal,
+              parseCurrent: p.current,
+              parseTotal: p.total,
+              saving: false,
+            };
+          }
+          return { ...base, saving: true };
+        });
       }
     }
 
@@ -66,6 +111,13 @@ export function App() {
     const months =
       Number.isFinite(monthsBack) && monthsBack >= 1 ? Math.min(120, Math.floor(monthsBack)) : 1;
 
+    setImportActivity({
+      downloadCurrent: 0,
+      downloadTotal: months,
+      parseCurrent: null,
+      parseTotal: null,
+      saving: false,
+    });
     setStatus(`Importing ${months} month${months === 1 ? "" : "s"} of archives for ${normalizedUsername}...`);
     worker.postMessage({
       type: "IMPORT_LATEST_ARCHIVE",
@@ -85,7 +137,11 @@ export function App() {
 
   return (
     <div class="layout">
-      <Sidebar onImport={handleImport} onClear={handleCleanDb} />
+      <Sidebar
+        importActivity={importActivity}
+        onImport={handleImport}
+        onClear={handleCleanDb}
+      />
       <MainContent status={status} />
     </div>
   );

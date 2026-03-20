@@ -1,8 +1,20 @@
 import pgnParser from "pgn-parser";
 
+import { isStandardImportStart } from "./startFen";
+
 const DB_NAME = "openingExplorer";
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const GAMES_STORE = "games";
+const MOVES_STORE = "moves";
+
+export type MoveRecord = {
+  id: string;
+  gameId: string;
+  /** 64-bit Zobrist key from `bitboard-chess` `getZobristKey()`, hex string (16 chars). */
+  fenHashBefore: string;
+  san: string;
+  fenHashAfter: string;
+};
 
 export type GameRecord = {
   uuid: string;
@@ -14,7 +26,10 @@ export type GameRecord = {
   timeClass: string | null;
   rated: boolean | null;
   eco: string | null;
+  /** Final position on Chess.com (matches PGN `[CurrentPosition]`). Not the start FEN for replay. */
   fen: string | null;
+  /** Starting position from the API (`initial_setup`). Use this (or default) when replaying the PGN from move 1. */
+  initialSetup: string | null;
   rules: string | null;
   timeControl: string | null;
   site: string | null;
@@ -32,6 +47,7 @@ export type ChessArchiveGame = {
   rated?: unknown;
   eco?: unknown;
   fen?: unknown;
+  initial_setup?: unknown;
   rules?: unknown;
   time_control?: unknown;
   white?: {
@@ -60,8 +76,14 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
 export async function openGamesDb(): Promise<IDBDatabase> {
   const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-  request.onupgradeneeded = () => {
+  request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
     const db = request.result;
+    const oldVersion = event.oldVersion;
+
+    if (oldVersion < 3 && db.objectStoreNames.contains(MOVES_STORE)) {
+      db.deleteObjectStore(MOVES_STORE);
+    }
+
     let store: IDBObjectStore;
 
     if (db.objectStoreNames.contains(GAMES_STORE)) {
@@ -81,6 +103,20 @@ export async function openGamesDb(): Promise<IDBDatabase> {
     }
     if (!store.indexNames.contains("eco")) {
       store.createIndex("eco", "eco", { unique: false });
+    }
+
+    let movesStore: IDBObjectStore;
+    if (db.objectStoreNames.contains(MOVES_STORE)) {
+      movesStore = request.transaction!.objectStore(MOVES_STORE);
+    } else {
+      movesStore = db.createObjectStore(MOVES_STORE, { keyPath: "id" });
+    }
+
+    if (!movesStore.indexNames.contains("fenHashBefore")) {
+      movesStore.createIndex("fenHashBefore", "fenHashBefore", { unique: false });
+    }
+    if (!movesStore.indexNames.contains("fenHashBeforeSan")) {
+      movesStore.createIndex("fenHashBeforeSan", ["fenHashBefore", "san"], { unique: false });
     }
   };
 
@@ -108,12 +144,59 @@ export async function upsertGames(records: GameRecord[]): Promise<void> {
   }
 }
 
+/** Replace each game row and its move rows (key-range delete on `id`, then insert moves). */
+export async function upsertGamesWithMoves(
+  entries: { record: GameRecord; moves: MoveRecord[] }[],
+): Promise<void> {
+  if (entries.length === 0) {
+    return;
+  }
+
+  const db = await openGamesDb();
+
+  try {
+    for (const { record, moves } of entries) {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction([GAMES_STORE, MOVES_STORE], "readwrite");
+        const gamesStore = tx.objectStore(GAMES_STORE);
+        const movesStore = tx.objectStore(MOVES_STORE);
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+
+        gamesStore.put(record);
+
+        const gameId = record.uuid;
+        const range = IDBKeyRange.bound(`${gameId}:`, `${gameId}:\uffff`);
+        const cursorReq = movesStore.openKeyCursor(range);
+
+        cursorReq.onerror = () => reject(cursorReq.error);
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (cursor) {
+            movesStore.delete(cursor.primaryKey);
+            cursor.continue();
+          } else {
+            for (const m of moves) {
+              movesStore.put(m);
+            }
+          }
+        };
+      });
+    }
+  } finally {
+    db.close();
+  }
+}
+
 export async function clearGamesStore(): Promise<void> {
   const db = await openGamesDb();
 
   try {
-    const tx = db.transaction(GAMES_STORE, "readwrite");
+    const tx = db.transaction([GAMES_STORE, MOVES_STORE], "readwrite");
     tx.objectStore(GAMES_STORE).clear();
+    tx.objectStore(MOVES_STORE).clear();
     await transactionDone(tx);
   } finally {
     db.close();
@@ -173,6 +256,12 @@ export function toGameRecord(game: ChessArchiveGame, username: string): GameReco
   }
 
   const pgn = asString(game.pgn);
+  const initialSetup = asString(game.initial_setup);
+
+  if (!isStandardImportStart(pgn, initialSetup)) {
+    return null;
+  }
+
   const pgnHeaders = parsePgnHeaders(pgn);
 
   return {
@@ -186,6 +275,7 @@ export function toGameRecord(game: ChessArchiveGame, username: string): GameReco
     rated: asBoolean(game.rated),
     eco: asString(game.eco),
     fen: asString(game.fen),
+    initialSetup,
     rules: asString(game.rules),
     timeControl: pgnHeaders.timeControl ?? asString(game.time_control),
     site: pgnHeaders.site,
