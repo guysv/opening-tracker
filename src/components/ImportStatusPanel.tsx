@@ -1,14 +1,55 @@
+import { useEffect, useState } from "preact/hooks";
+
 export type ImportActivitySnapshot = {
   downloadCurrent: number;
   downloadTotal: number;
   parseCurrent: number | null;
   parseTotal: number | null;
   saving: boolean;
+  /** `Date.now()` when save phase began; null when not saving. */
+  savingStartedAt: number | null;
 };
 
 type ImportStatusPanelProps = {
   activity: ImportActivitySnapshot;
 };
+
+function formatElapsedMs(ms: number): string {
+  if (ms < 60_000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+type SavingElapsedProps = {
+  saving: boolean;
+  savingStartedAt: number | null;
+};
+
+function SavingElapsedLabel({ saving, savingStartedAt }: SavingElapsedProps) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!saving || savingStartedAt === null) {
+      return;
+    }
+    const id = window.setInterval(() => setNow(Date.now()), 100);
+    return () => window.clearInterval(id);
+  }, [saving, savingStartedAt]);
+
+  if (!saving) {
+    return <span class="import-status-widget-mono">—</span>;
+  }
+  if (savingStartedAt === null) {
+    return <span class="import-status-widget-mono">…</span>;
+  }
+  return (
+    <span class="import-status-widget-mono">{formatElapsedMs(now - savingStartedAt)}</span>
+  );
+}
 
 export function ImportStatusPanel({ activity }: ImportStatusPanelProps) {
   const {
@@ -17,6 +58,7 @@ export function ImportStatusPanel({ activity }: ImportStatusPanelProps) {
     parseCurrent,
     parseTotal,
     saving,
+    savingStartedAt,
   } = activity;
 
   const downloadDone =
@@ -70,7 +112,7 @@ export function ImportStatusPanel({ activity }: ImportStatusPanelProps) {
           }
         >
           <span>Saving to storage</span>
-          <span class="import-status-widget-mono">{saving ? "…" : "—"}</span>
+          <SavingElapsedLabel saving={saving} savingStartedAt={savingStartedAt} />
         </li>
       </ul>
     </div>

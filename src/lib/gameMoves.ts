@@ -4,6 +4,9 @@ import pgnParser from "pgn-parser";
 import type { GameRecord, MoveRecord } from "./gamesDb";
 import { resolveStartFen } from "./startFen";
 
+/** Half-moves (plies) kept per game in IndexedDB (opening slice only). */
+export const MAX_STORED_PLIES = 30;
+
 /** Digits for `id` suffix so `IDBKeyRange` per game works (see plan). */
 const MOVE_INDEX_PAD = 5;
 
@@ -54,10 +57,62 @@ export function extractMainLineSans(pgn: string | null): string[] {
   }
 }
 
+function escapePgnHeaderValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function formatSansAsMovetext(sans: string[]): string {
+  const parts: string[] = [];
+  for (let i = 0; i < sans.length; i++) {
+    if (i % 2 === 0) {
+      parts.push(`${Math.floor(i / 2) + 1}. ${sans[i]}`);
+    } else {
+      parts.push(sans[i]!);
+    }
+  }
+  return parts.join(" ");
+}
+
+/** Headers unchanged; movetext is only the first `maxPlies` half-moves. */
+export function truncateGamePgnForStorage(pgn: string | null, maxPlies = MAX_STORED_PLIES): string | null {
+  if (!pgn) {
+    return null;
+  }
+
+  const fullSans = extractMainLineSans(pgn);
+  const sans = fullSans.slice(0, maxPlies);
+
+  if (sans.length === 0 || sans.length === fullSans.length) {
+    return pgn;
+  }
+
+  try {
+    const parsed = pgnParser.parse(pgn);
+    const firstGame = Array.isArray(parsed) ? parsed[0] : null;
+    const headers = firstGame?.headers ?? [];
+    const lines: string[] = [];
+
+    for (const h of headers) {
+      if (typeof h?.name === "string" && typeof h?.value === "string") {
+        lines.push(`[${h.name} "${escapePgnHeaderValue(h.value)}"]`);
+      }
+    }
+
+    const movetext = formatSansAsMovetext(sans);
+    return lines.length > 0 ? `${lines.join("\n")}\n\n${movetext}` : movetext;
+  } catch {
+    return pgn;
+  }
+}
+
+export function truncateGameRecordForStorage(record: GameRecord): GameRecord {
+  return { ...record, pgn: truncateGamePgnForStorage(record.pgn) };
+}
+
 export function buildMoveRecords(record: GameRecord): MoveRecord[] {
   const gameId = record.uuid;
   const pgn = record.pgn;
-  const sans = extractMainLineSans(pgn);
+  const sans = extractMainLineSans(pgn).slice(0, MAX_STORED_PLIES);
 
   if (sans.length === 0) {
     return [];

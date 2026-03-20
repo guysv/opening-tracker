@@ -155,36 +155,21 @@ export async function upsertGamesWithMoves(
   const db = await openGamesDb();
 
   try {
+    const tx = db.transaction([GAMES_STORE, MOVES_STORE], "readwrite");
+    const gamesStore = tx.objectStore(GAMES_STORE);
+    const movesStore = tx.objectStore(MOVES_STORE);
+
     for (const { record, moves } of entries) {
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction([GAMES_STORE, MOVES_STORE], "readwrite");
-        const gamesStore = tx.objectStore(GAMES_STORE);
-        const movesStore = tx.objectStore(MOVES_STORE);
-
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-        tx.onabort = () => reject(tx.error);
-
-        gamesStore.put(record);
-
-        const gameId = record.uuid;
-        const range = IDBKeyRange.bound(`${gameId}:`, `${gameId}:\uffff`);
-        const cursorReq = movesStore.openKeyCursor(range);
-
-        cursorReq.onerror = () => reject(cursorReq.error);
-        cursorReq.onsuccess = () => {
-          const cursor = cursorReq.result;
-          if (cursor) {
-            movesStore.delete(cursor.primaryKey);
-            cursor.continue();
-          } else {
-            for (const m of moves) {
-              movesStore.put(m);
-            }
-          }
-        };
-      });
+      const gameId = record.uuid;
+      const range = IDBKeyRange.bound(`${gameId}:`, `${gameId}:\uffff`);
+      movesStore.delete(range);
+      gamesStore.put(record);
+      for (const m of moves) {
+        movesStore.put(m);
+      }
     }
+
+    await transactionDone(tx);
   } finally {
     db.close();
   }

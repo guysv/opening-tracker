@@ -69,6 +69,7 @@ export function App() {
             parseCurrent: null,
             parseTotal: null,
             saving: false,
+            savingStartedAt: null,
           };
           if (p.phase === "download") {
             return {
@@ -76,6 +77,7 @@ export function App() {
               downloadCurrent: p.current,
               downloadTotal: p.total,
               saving: false,
+              savingStartedAt: null,
             };
           }
           if (p.phase === "parse") {
@@ -85,9 +87,14 @@ export function App() {
               parseCurrent: p.current,
               parseTotal: p.total,
               saving: false,
+              savingStartedAt: null,
             };
           }
-          return { ...base, saving: true };
+          return {
+            ...base,
+            saving: true,
+            savingStartedAt: base.savingStartedAt ?? Date.now(),
+          };
         });
       }
     }
@@ -117,6 +124,7 @@ export function App() {
       parseCurrent: null,
       parseTotal: null,
       saving: false,
+      savingStartedAt: null,
     });
     setStatus(`Importing ${months} month${months === 1 ? "" : "s"} of archives for ${normalizedUsername}...`);
     worker.postMessage({

@@ -5,6 +5,7 @@ import {
   type GameRecord,
   type MoveRecord,
 } from "../lib/gamesDb";
+import { truncateGameRecordForStorage } from "../lib/gameMoves";
 
 type ImportRequestMessage = {
   type: "IMPORT_LATEST_ARCHIVE";
@@ -230,7 +231,8 @@ self.onmessage = async (event: MessageEvent<ImportRequestMessage>) => {
 
     const records = allGames
       .map((game) => toGameRecord(game, normalizedUsername))
-      .filter((record): record is NonNullable<typeof record> => record !== null);
+      .filter((record): record is NonNullable<typeof record> => record !== null)
+      .map(truncateGameRecordForStorage);
 
     console.log(`Mapped ${records.length} valid records from ${monthsBack} month(s).`);
 
