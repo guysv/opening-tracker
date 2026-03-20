@@ -1,9 +1,13 @@
+import { StorageEstimatePanel } from "./StorageEstimatePanel";
+
 type SidebarProps = {
   onImport: (username: string, monthsBack: number) => void;
+  onClear: () => void;
 };
 
 export function Sidebar({
   onImport,
+  onClear,
 }: SidebarProps) {
   function handleSubmit(event: SubmitEvent) {
     event.preventDefault();
@@ -41,7 +45,12 @@ export function Sidebar({
         </label>
 
         <button type="submit">Import</button>
+        <button type="button" onClick={onClear}>
+          Clean IndexedDB
+        </button>
       </form>
+
+      <StorageEstimatePanel />
     </aside>
   );
 }

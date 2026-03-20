@@ -21,7 +21,7 @@ const server = Bun.serve({
     }
 
     const result = await Bun.build({
-      entrypoints: ["src/index.html"],
+      entrypoints: ["src/index.html", "src/workers/gameImport.worker.ts"],
       outdir: "dist",
       sourcemap: "inline",
     });
@@ -49,6 +49,16 @@ const server = Bun.serve({
       }
 
       return body;
+    }
+
+    const isAssetRequest =
+      path.includes(".") ||
+      path.startsWith("/workers/") ||
+      path.startsWith("/chunk-") ||
+      path.startsWith("/index-");
+
+    if (isAssetRequest) {
+      return new Response("Not found", { status: 404 });
     }
 
     const index = Bun.file("dist/index.html");
