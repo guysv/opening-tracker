@@ -30,7 +30,9 @@ export function parseFragment(hash: string): ExplorerLocation {
 }
 
 export function buildFragment(posHash: string, via: string[]): string {
-  const viaPart = via.length > 0 ? `?via=${encodeURIComponent(via.join(","))}` : "";
+  // Encode each SAN separately so separator commas stay literal in the URL.
+  const viaPart =
+    via.length > 0 ? `?via=${via.map((s) => encodeURIComponent(s)).join(",")}` : "";
   return `#${posHash}${viaPart}`;
 }
 
