@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import { useExplorerLocation } from "../hooks/useExplorerLocation";
 import {
   fetchAggregatedMoves,
+  previewHoveredMove,
   replayMoves,
   startPositionHash,
   type AggregatedMove,
@@ -46,11 +47,21 @@ function ResultBar({ move }: { move: AggregatedMove }) {
 export function OpeningExplorer() {
   const loc = useExplorerLocation();
   const [moves, setMoves] = useState<AggregatedMove[]>([]);
-  const [colorFilter, setColorFilter] = useState<ColorFilter>("both");
+  const [colorFilter, setColorFilter] = useState<ColorFilter>("w");
+  const [previewSan, setPreviewSan] = useState<string | null>(null);
 
   const replay = useMemo(() => replayMoves(loc.via), [loc.via]);
 
+  const hoverPreview = useMemo(() => {
+    if (!previewSan || replay.error) return null;
+    return previewHoveredMove(loc.via, previewSan);
+  }, [previewSan, loc.via, replay.error]);
+
   const posHash = replay.posHash;
+
+  useEffect(() => {
+    setPreviewSan(null);
+  }, [loc.via]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,20 +114,23 @@ export function OpeningExplorer() {
           <div class="color-toggle">
             <button
               class={`color-toggle-btn ${colorFilter === "w" ? "color-toggle-btn--active" : ""}`}
-              onClick={() => setColorFilter(colorFilter === "w" ? "both" : "w")}
+              onClick={() => setColorFilter("w")}
             >
               As white
             </button>
             <button
               class={`color-toggle-btn ${colorFilter === "b" ? "color-toggle-btn--active" : ""}`}
-              onClick={() => setColorFilter(colorFilter === "b" ? "both" : "b")}
+              onClick={() => setColorFilter("b")}
             >
               As black
             </button>
           </div>
 
           <span class="side-badge">
-            {replay.sideToMove === "w" ? "\u25CB" : "\u25CF"}{" "}
+            <span
+              class={`turn-dot ${replay.sideToMove === "w" ? "turn-dot--white" : "turn-dot--black"}`}
+              aria-hidden
+            />
             {replay.sideToMove === "w" ? "White" : "Black"} to move
           </span>
         </div>
@@ -131,9 +145,20 @@ export function OpeningExplorer() {
       </div>
 
       <div class="explorer-body">
-        <ChessBoard fen={replay.fen} />
+        <ChessBoard
+          fen={hoverPreview?.fen ?? replay.fen}
+          highlightFrom={hoverPreview?.fromSq ?? null}
+          highlightTo={hoverPreview?.toSq ?? null}
+        />
 
-        <div class="explorer-moves">
+        <div
+          class="explorer-moves"
+          onMouseLeave={(e) => {
+            const next = e.relatedTarget as Node | null;
+            if (next && e.currentTarget.contains(next)) return;
+            setPreviewSan(null);
+          }}
+        >
           {replay.error ? (
             <p class="explorer-error">
               Replay failed on move: <strong>{replay.error}</strong>
@@ -156,8 +181,9 @@ export function OpeningExplorer() {
                 {moves.map((m) => (
                   <tr
                     key={m.san}
-                    class="moves-row"
+                    class={`moves-row ${previewSan === m.san ? "moves-row--preview" : ""}`}
                     onClick={() => handleMoveClick(m)}
+                    onMouseEnter={() => setPreviewSan(m.san)}
                   >
                     <td class="moves-san">{m.san}</td>
                     <td class="moves-games">

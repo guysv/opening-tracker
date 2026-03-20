@@ -241,15 +241,18 @@ self.onmessage = async (event: MessageEvent<ImportRequestMessage>) => {
       record,
       moves: movesByGame.get(record.uuid) ?? [],
     }));
+    // Skipped when `buildMoveRecords` yields no rows: PGN produced no SANs (parse) or the first SAN failed to replay.
+    // Mid-game replay failures still produce partial rows and are kept.
+    const entriesWithMoves = entries.filter((e) => e.moves.length > 0);
 
     postProgress({ phase: "save" });
-    await upsertGamesWithMoves(entries);
+    await upsertGamesWithMoves(entriesWithMoves);
 
     const payload: ImportSuccessMessage = {
       type: "IMPORT_SUCCESS",
       payload: {
         username: normalizedUsername,
-        importedCount: records.length,
+        importedCount: entriesWithMoves.length,
         monthsBack,
       },
     };

@@ -193,6 +193,33 @@ export async function getMovesForPosition(fenHash: string): Promise<MoveRecord[]
   }
 }
 
+export async function getGamesByUuids(uuids: string[]): Promise<Map<string, GameRecord>> {
+  const unique = [...new Set(uuids)];
+  if (unique.length === 0) {
+    return new Map();
+  }
+
+  const db = await openGamesDb();
+
+  try {
+    const tx = db.transaction(GAMES_STORE, "readonly");
+    const store = tx.objectStore(GAMES_STORE);
+    const map = new Map<string, GameRecord>();
+
+    await Promise.all(
+      unique.map((uuid) =>
+        requestToPromise(store.get(uuid)).then((g) => {
+          if (g) map.set(uuid, g as GameRecord);
+        }),
+      ),
+    );
+
+    return map;
+  } finally {
+    db.close();
+  }
+}
+
 export async function clearGamesStore(): Promise<void> {
   const db = await openGamesDb();
 

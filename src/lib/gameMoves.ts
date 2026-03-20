@@ -2,7 +2,7 @@ import BitboardChess from "bitboard-chess";
 import pgnParser from "pgn-parser";
 
 import type { GameRecord, MoveRecord } from "./gamesDb";
-import { resolveStartFen } from "./startFen";
+import { resolveStartFen, STANDARD_START_PLACEMENT } from "./startFen";
 
 /** Half-moves (plies) kept per game in IndexedDB (opening slice only). */
 export const MAX_STORED_PLIES = 30;
@@ -32,6 +32,35 @@ export function sanForEngine(raw: string): string {
 }
 
 export { resolveStartFen } from "./startFen";
+
+/** Resolve which color `username` played using PGN [White]/[Black] when JSON fields are missing or mismatched. */
+function userColorFromPgnHeaders(pgn: string | null, username: string): "w" | "b" | undefined {
+  if (!pgn || !username) return undefined;
+  const u = username.trim().toLowerCase();
+  if (!u) return undefined;
+
+  try {
+    const parsed = pgnParser.parse(pgn);
+    const firstGame = Array.isArray(parsed) ? parsed[0] : null;
+    const headers = firstGame && Array.isArray(firstGame.headers) ? firstGame.headers : [];
+
+    let white = "";
+    let black = "";
+    for (const h of headers) {
+      if (!h || typeof h.name !== "string" || typeof h.value !== "string") continue;
+      const name = h.name.toLowerCase();
+      if (name === "white") white = h.value;
+      else if (name === "black") black = h.value;
+    }
+
+    if (white.trim().toLowerCase() === u) return "w";
+    if (black.trim().toLowerCase() === u) return "b";
+  } catch {
+    /* ignore */
+  }
+
+  return undefined;
+}
 
 export function extractMainLineSans(pgn: string | null): string[] {
   if (!pgn) {
@@ -91,15 +120,23 @@ export function truncateGamePgnForStorage(pgn: string | null, maxPlies = MAX_STO
     const firstGame = Array.isArray(parsed) ? parsed[0] : null;
     const headers = firstGame?.headers ?? [];
     const lines: string[] = [];
+    let resultToken = "*";
 
     for (const h of headers) {
       if (typeof h?.name === "string" && typeof h?.value === "string") {
+        if (h.name.toLowerCase() === "result") {
+          const v = h.value.trim();
+          resultToken = v.length > 0 ? v : "*";
+        }
         lines.push(`[${h.name} "${escapePgnHeaderValue(h.value)}"]`);
       }
     }
 
     const movetext = formatSansAsMovetext(sans);
-    return lines.length > 0 ? `${lines.join("\n")}\n\n${movetext}` : movetext;
+    // pgn-parser requires a game-termination token after movetext (e.g. 1-0, *). Rebuilt movetext
+    // previously ended mid-line and failed to parse, yielding zero SANs for most stored games.
+    const body = `${movetext} ${resultToken}`;
+    return lines.length > 0 ? `${lines.join("\n")}\n\n${body}` : body;
   } catch {
     return pgn;
   }
@@ -107,6 +144,16 @@ export function truncateGamePgnForStorage(pgn: string | null, maxPlies = MAX_STO
 
 export function truncateGameRecordForStorage(record: GameRecord): GameRecord {
   return { ...record, pgn: truncateGamePgnForStorage(record.pgn) };
+}
+
+export function inferUserColor(
+  record: Pick<GameRecord, "username" | "whiteUsername" | "blackUsername" | "pgn">,
+): "w" | "b" | undefined {
+  const u = record.username?.trim();
+  if (!u) return undefined;
+  if (record.whiteUsername.trim().toLowerCase() === u.toLowerCase()) return "w";
+  if (record.blackUsername.trim().toLowerCase() === u.toLowerCase()) return "b";
+  return userColorFromPgnHeaders(record.pgn, u);
 }
 
 export function buildMoveRecords(record: GameRecord): MoveRecord[] {
@@ -122,16 +169,19 @@ export function buildMoveRecords(record: GameRecord): MoveRecord[] {
   const startFen = resolveStartFen(pgn, record.initialSetup);
 
   if (startFen) {
-    board.loadFromFEN(startFen);
+    const tokens = startFen.trim().split(/\s+/);
+    const placement = tokens[0];
+    const side = tokens[1];
+    // Standard placement + w: ignore FEN castling/ep quirks so Zobrist matches explorer `startPositionHash()`.
+    const useEngineDefaultStart =
+      placement === STANDARD_START_PLACEMENT && side === "w";
+    if (!useEngineDefaultStart) {
+      board.loadFromFEN(startFen);
+    }
   }
 
   const result = record.result ?? undefined;
-  const userColor: "w" | "b" | undefined =
-    record.username && record.whiteUsername.toLowerCase() === record.username.toLowerCase()
-      ? "w"
-      : record.username && record.blackUsername.toLowerCase() === record.username.toLowerCase()
-        ? "b"
-        : undefined;
+  const userColor = inferUserColor(record);
 
   const out: MoveRecord[] = [];
 

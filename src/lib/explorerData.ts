@@ -1,7 +1,8 @@
 import BitboardChess from "bitboard-chess";
 
 import { sanForEngine } from "./gameMoves";
-import { getMovesForPosition, type MoveRecord } from "./gamesDb";
+import { getGamesByUuids, getMovesForPosition, type MoveRecord } from "./gamesDb";
+import { inferUserColor } from "./gameMoves";
 
 function zobristKeyToHex(key: bigint): string {
   return key.toString(16).padStart(16, "0");
@@ -48,7 +49,34 @@ export function startPositionHash(): string {
   return zobristKeyToHex(board.getZobristKey());
 }
 
-export type ColorFilter = "both" | "w" | "b";
+export type HoverMovePreview = {
+  fen: string;
+  fromSq: string;
+  toSq: string;
+};
+
+function sqIndexToAlgebraic(i: number): string {
+  const file = String.fromCharCode(97 + (i % 8));
+  const rank = Math.floor(i / 8) + 1;
+  return `${file}${rank}`;
+}
+
+/** Board after playing `san` from the position reached by `via`, plus from/to for square highlights. */
+export function previewHoveredMove(via: string[], san: string): HoverMovePreview | null {
+  const board = new BitboardChess();
+  for (const s of via) {
+    if (!board.makeMoveSAN(sanForEngine(s))) return null;
+  }
+  const cleaned = sanForEngine(san);
+  const move = board.resolveSAN(cleaned);
+  if (!move) return null;
+  const fromSq = sqIndexToAlgebraic(move.from);
+  const toSq = sqIndexToAlgebraic(move.to);
+  if (!board.makeMoveSAN(cleaned)) return null;
+  return { fen: board.toFEN(), fromSq, toSq };
+}
+
+export type ColorFilter = "w" | "b";
 
 export type AggregatedMove = {
   san: string;
@@ -67,11 +95,11 @@ function classifyResult(result: string | undefined, userColor: "w" | "b" | undef
   return null;
 }
 
-export function aggregateMoves(records: MoveRecord[], colorFilter: ColorFilter = "both"): AggregatedMove[] {
+export function aggregateMoves(records: MoveRecord[], colorFilter: ColorFilter = "w"): AggregatedMove[] {
   const map = new Map<string, { games: number; wins: number; draws: number; losses: number; fenHashAfter: string }>();
 
   for (const r of records) {
-    if (colorFilter !== "both" && r.userColor !== colorFilter) continue;
+    if (r.userColor !== colorFilter) continue;
 
     const entry = map.get(r.san);
     const outcome = classifyResult(r.result, r.userColor);
@@ -94,7 +122,25 @@ export function aggregateMoves(records: MoveRecord[], colorFilter: ColorFilter =
     .sort((a, b) => b.games - a.games);
 }
 
-export async function fetchAggregatedMoves(posHash: string, colorFilter: ColorFilter = "both"): Promise<AggregatedMove[]> {
+async function withInferredUserColor(records: MoveRecord[]): Promise<MoveRecord[]> {
+  const needGameIds = [...new Set(records.filter((r) => r.userColor === undefined).map((r) => r.gameId))];
+  if (needGameIds.length === 0) {
+    return records;
+  }
+
+  const games = await getGamesByUuids(needGameIds);
+
+  return records.map((r) => {
+    if (r.userColor !== undefined) return r;
+    const g = games.get(r.gameId);
+    if (!g) return r;
+    const userColor = inferUserColor(g);
+    return userColor ? { ...r, userColor } : r;
+  });
+}
+
+export async function fetchAggregatedMoves(posHash: string, colorFilter: ColorFilter = "w"): Promise<AggregatedMove[]> {
   const records = await getMovesForPosition(posHash);
-  return aggregateMoves(records, colorFilter);
+  const enriched = await withInferredUserColor(records);
+  return aggregateMoves(enriched, colorFilter);
 }

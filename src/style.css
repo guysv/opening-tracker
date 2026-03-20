@@ -332,8 +332,27 @@ button:hover {
 }
 
 .side-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+.turn-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid #555;
+  flex-shrink: 0;
+}
+
+.turn-dot--white {
+  background: #f0f0f0;
+}
+
+.turn-dot--black {
+  background: #1a1a1a;
 }
 
 .analyze-link {
@@ -480,6 +499,14 @@ button:hover {
 
 .moves-row:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.moves-row.moves-row--preview {
+  background: rgba(37, 99, 235, 0.2);
+}
+
+.moves-row.moves-row--preview:hover {
+  background: rgba(37, 99, 235, 0.26);
 }
 
 .moves-san {

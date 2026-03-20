@@ -29,10 +29,24 @@ function parsePlacement(fen: string): (string | null)[][] {
 type ChessBoardProps = {
   fen: string;
   flipped?: boolean;
+  /** Algebraic square (e.g. e2) — last move from (hover preview). */
+  highlightFrom?: string | null;
+  /** Algebraic square (e.g. e4) — last move to (hover preview). */
+  highlightTo?: string | null;
 };
 
-export function ChessBoard({ fen, flipped = false }: ChessBoardProps) {
+function parseAlgebraicSquare(sq: string): { r: number; f: number } | null {
+  if (sq.length < 2) return null;
+  const file = sq.charCodeAt(0) - 97;
+  const rank = Number.parseInt(sq.slice(1), 10);
+  if (file < 0 || file > 7 || rank < 1 || rank > 8 || Number.isNaN(rank)) return null;
+  return { r: 8 - rank, f: file };
+}
+
+export function ChessBoard({ fen, flipped = false, highlightFrom = null, highlightTo = null }: ChessBoardProps) {
   const rows = parsePlacement(fen);
+  const fromCoords = highlightFrom ? parseAlgebraicSquare(highlightFrom) : null;
+  const toCoords = highlightTo ? parseAlgebraicSquare(highlightTo) : null;
 
   const rankOrder = flipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [0, 1, 2, 3, 4, 5, 6, 7];
   const fileOrder = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
@@ -48,9 +62,16 @@ export function ChessBoard({ fen, flipped = false }: ChessBoardProps) {
             {fileOrder.map((f) => {
               const piece = rows[r]?.[f] ?? null;
               const isLight = (r + f) % 2 === 0;
+              const hlFrom = fromCoords && fromCoords.r === r && fromCoords.f === f;
+              const hlTo = toCoords && toCoords.r === r && toCoords.f === f;
               return (
                 <div
-                  class={`board-sq ${isLight ? "board-sq--light" : "board-sq--dark"}`}
+                  class={[
+                    "board-sq",
+                    isLight ? "board-sq--light" : "board-sq--dark",
+                    hlFrom ? "board-sq--highlight-from" : "",
+                    hlTo ? "board-sq--highlight-to" : "",
+                  ].filter(Boolean).join(" ")}
                   key={f}
                 >
                   {piece ? (
