@@ -14,6 +14,10 @@ export type MoveRecord = {
   fenHashBefore: string;
   san: string;
   fenHashAfter: string;
+  /** PGN Result header: "1-0", "0-1", "1/2-1/2", or "*". Optional for pre-existing records. */
+  result?: string;
+  /** Which color the imported user played: "w" or "b". Optional for pre-existing records. */
+  userColor?: "w" | "b";
 };
 
 export type GameRecord = {
@@ -35,6 +39,8 @@ export type GameRecord = {
   site: string | null;
   event: string | null;
   pgn: string | null;
+  /** PGN Result header: "1-0", "0-1", "1/2-1/2", or "*". */
+  result: string | null;
   importedAt: number;
 };
 
@@ -175,6 +181,18 @@ export async function upsertGamesWithMoves(
   }
 }
 
+export async function getMovesForPosition(fenHash: string): Promise<MoveRecord[]> {
+  const db = await openGamesDb();
+
+  try {
+    const tx = db.transaction(MOVES_STORE, "readonly");
+    const index = tx.objectStore(MOVES_STORE).index("fenHashBefore");
+    return await requestToPromise(index.getAll(fenHash));
+  } finally {
+    db.close();
+  }
+}
+
 export async function clearGamesStore(): Promise<void> {
   const db = await openGamesDb();
 
@@ -204,9 +222,10 @@ function parsePgnHeaders(pgn: string | null): {
   timeControl: string | null;
   site: string | null;
   event: string | null;
+  result: string | null;
 } {
   if (!pgn) {
-    return { timeControl: null, site: null, event: null };
+    return { timeControl: null, site: null, event: null, result: null };
   }
 
   try {
@@ -226,9 +245,10 @@ function parsePgnHeaders(pgn: string | null): {
       timeControl: values.get("timecontrol") ?? null,
       site: values.get("site") ?? null,
       event: values.get("event") ?? null,
+      result: values.get("result") ?? null,
     };
   } catch {
-    return { timeControl: null, site: null, event: null };
+    return { timeControl: null, site: null, event: null, result: null };
   }
 }
 
@@ -266,6 +286,7 @@ export function toGameRecord(game: ChessArchiveGame, username: string): GameReco
     site: pgnHeaders.site,
     event: pgnHeaders.event,
     pgn,
+    result: pgnHeaders.result,
     importedAt: Date.now(),
   };
 }

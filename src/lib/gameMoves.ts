@@ -125,6 +125,14 @@ export function buildMoveRecords(record: GameRecord): MoveRecord[] {
     board.loadFromFEN(startFen);
   }
 
+  const result = record.result ?? undefined;
+  const userColor: "w" | "b" | undefined =
+    record.username && record.whiteUsername.toLowerCase() === record.username.toLowerCase()
+      ? "w"
+      : record.username && record.blackUsername.toLowerCase() === record.username.toLowerCase()
+        ? "b"
+        : undefined;
+
   const out: MoveRecord[] = [];
 
   for (let i = 0; i < sans.length; i++) {
@@ -146,6 +154,8 @@ export function buildMoveRecords(record: GameRecord): MoveRecord[] {
       fenHashBefore,
       san,
       fenHashAfter,
+      result,
+      userColor,
     });
   }
 

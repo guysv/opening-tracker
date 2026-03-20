@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 
 import { clearGamesStore } from "../lib/gamesDb";
 import type { ImportActivitySnapshot } from "./ImportStatusPanel";
-import { MainContent } from "./MainContent";
+import { OpeningExplorer } from "./OpeningExplorer";
 import { Sidebar } from "./Sidebar";
 
 type WorkerResponse =
@@ -147,10 +147,11 @@ export function App() {
     <div class="layout">
       <Sidebar
         importActivity={importActivity}
+        status={status}
         onImport={handleImport}
         onClear={handleCleanDb}
       />
-      <MainContent status={status} />
+      <OpeningExplorer />
     </div>
   );
 }

@@ -3,12 +3,14 @@ import { StorageEstimatePanel } from "./StorageEstimatePanel";
 
 type SidebarProps = {
   importActivity: ImportActivitySnapshot | null;
+  status: string;
   onImport: (username: string, monthsBack: number) => void;
   onClear: () => void;
 };
 
 export function Sidebar({
   importActivity,
+  status,
   onImport,
   onClear,
 }: SidebarProps) {
@@ -54,6 +56,8 @@ export function Sidebar({
       </form>
 
       {importActivity ? <ImportStatusPanel activity={importActivity} /> : null}
+
+      <p class="sidebar-status">{status}</p>
 
       <StorageEstimatePanel />
     </aside>
