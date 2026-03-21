@@ -18,6 +18,8 @@ export type MoveRecord = {
   result?: string;
   /** Which color the imported user played: "w" or "b". Optional for pre-existing records. */
   userColor?: "w" | "b";
+  /** How the user won within the opening window: "trap" (material ≥ +3), "mate" (early checkmate), or omitted for regular wins/non-wins. */
+  winKind?: "trap" | "mate";
 };
 
 export type GameRecord = {

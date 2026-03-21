@@ -535,10 +535,25 @@ button:hover {
   height: 10px;
   border-radius: 3px;
   overflow: hidden;
+  transition: width 0.2s ease;
+}
+
+.moves-row:hover .result-bar {
+  width: 100% !important;
+}
+
+.result-bar-mate-win {
+  background: #e8e8e8;
+  height: 100%;
+}
+
+.result-bar-trap-win {
+  background: #4ade80;
+  height: 100%;
 }
 
 .result-bar-win {
-  background: #4ade80;
+  background: #22ff6e;
   height: 100%;
 }
 

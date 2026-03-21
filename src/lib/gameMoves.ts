@@ -156,6 +156,41 @@ export function inferUserColor(
   return userColorFromPgnHeaders(record.pgn, u);
 }
 
+function popcount64(n: bigint): number {
+  let count = 0;
+  let v = n;
+  while (v !== 0n) {
+    v &= v - 1n;
+    count++;
+  }
+  return count;
+}
+
+/** White − Black material in pawn-units (P=1, N=B=3, R=5, Q=9). */
+function materialBalance(board: BitboardChess): number {
+  const p = board.getPosition();
+  const w =
+    popcount64(p.whitePawns) +
+    popcount64(p.whiteKnights) * 3 +
+    popcount64(p.whiteBishops) * 3 +
+    popcount64(p.whiteRooks) * 5 +
+    popcount64(p.whiteQueens) * 9;
+  const b =
+    popcount64(p.blackPawns) +
+    popcount64(p.blackKnights) * 3 +
+    popcount64(p.blackBishops) * 3 +
+    popcount64(p.blackRooks) * 5 +
+    popcount64(p.blackQueens) * 9;
+  return w - b;
+}
+
+function isUserWin(result: string | undefined, userColor: "w" | "b" | undefined): boolean {
+  if (!result || !userColor) return false;
+  if (result === "1-0") return userColor === "w";
+  if (result === "0-1") return userColor === "b";
+  return false;
+}
+
 export function buildMoveRecords(record: GameRecord): MoveRecord[] {
   const gameId = record.uuid;
   const pgn = record.pgn;
@@ -184,6 +219,8 @@ export function buildMoveRecords(record: GameRecord): MoveRecord[] {
   const userColor = inferUserColor(record);
 
   const out: MoveRecord[] = [];
+  let maxUserAdvantage = 0;
+  let earlyMateByUser = false;
 
   for (let i = 0; i < sans.length; i++) {
     const san = sans[i]!;
@@ -193,6 +230,15 @@ export function buildMoveRecords(record: GameRecord): MoveRecord[] {
 
     if (!ok) {
       break;
+    }
+
+    if (userColor) {
+      const bal = materialBalance(board);
+      const adv = userColor === "w" ? bal : -bal;
+      if (adv > maxUserAdvantage) maxUserAdvantage = adv;
+
+      const userMoved = (i % 2 === 0) === (userColor === "w");
+      if (userMoved && san.includes("#")) earlyMateByUser = true;
     }
 
     const fenHashAfter = zobristKeyToHex(board.getZobristKey());
@@ -207,6 +253,17 @@ export function buildMoveRecords(record: GameRecord): MoveRecord[] {
       result,
       userColor,
     });
+  }
+
+  if (isUserWin(result, userColor)) {
+    const kind: "mate" | "trap" | undefined = earlyMateByUser
+      ? "mate"
+      : maxUserAdvantage >= 3
+        ? "trap"
+        : undefined;
+    if (kind) {
+      for (const m of out) m.winKind = kind;
+    }
   }
 
   return out;

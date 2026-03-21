@@ -84,6 +84,8 @@ export type AggregatedMove = {
   wins: number;
   draws: number;
   losses: number;
+  trapWins: number;
+  mateWins: number;
   fenHashAfter: string;
 };
 
@@ -96,7 +98,7 @@ function classifyResult(result: string | undefined, userColor: "w" | "b" | undef
 }
 
 export function aggregateMoves(records: MoveRecord[], colorFilter: ColorFilter = "w"): AggregatedMove[] {
-  const map = new Map<string, { games: number; wins: number; draws: number; losses: number; fenHashAfter: string }>();
+  const map = new Map<string, { games: number; wins: number; draws: number; losses: number; trapWins: number; mateWins: number; fenHashAfter: string }>();
 
   for (const r of records) {
     if (r.userColor !== colorFilter) continue;
@@ -106,14 +108,18 @@ export function aggregateMoves(records: MoveRecord[], colorFilter: ColorFilter =
     const w = outcome === "win" ? 1 : 0;
     const d = outcome === "draw" ? 1 : 0;
     const l = outcome === "loss" ? 1 : 0;
+    const tw = (w && r.winKind === "trap") ? 1 : 0;
+    const mw = (w && r.winKind === "mate") ? 1 : 0;
 
     if (entry) {
       entry.games++;
       entry.wins += w;
       entry.draws += d;
       entry.losses += l;
+      entry.trapWins += tw;
+      entry.mateWins += mw;
     } else {
-      map.set(r.san, { games: 1, wins: w, draws: d, losses: l, fenHashAfter: r.fenHashAfter });
+      map.set(r.san, { games: 1, wins: w, draws: d, losses: l, trapWins: tw, mateWins: mw, fenHashAfter: r.fenHashAfter });
     }
   }
 
