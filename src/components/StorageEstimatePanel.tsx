@@ -1,4 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
+import { getDbSize } from "../lib/dbClient";
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
@@ -13,9 +14,8 @@ function formatBytes(bytes: number): string {
 
 type PanelState =
   | { status: "loading" }
-  | { status: "unsupported" }
   | { status: "error"; message: string }
-  | { status: "ready"; usage: number; quota: number };
+  | { status: "ready"; sizeBytes: number };
 
 export function StorageEstimatePanel() {
   const [state, setState] = useState<PanelState>({ status: "loading" });
@@ -24,13 +24,9 @@ export function StorageEstimatePanel() {
     let cancelled = false;
 
     async function tick() {
-      if (!navigator.storage?.estimate) {
-        if (!cancelled) setState({ status: "unsupported" });
-        return;
-      }
       try {
-        const { usage = 0, quota = 0 } = await navigator.storage.estimate();
-        if (!cancelled) setState({ status: "ready", usage, quota });
+        const sizeBytes = await getDbSize();
+        if (!cancelled) setState({ status: "ready", sizeBytes });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Unknown error";
         if (!cancelled) setState({ status: "error", message });
@@ -38,7 +34,7 @@ export function StorageEstimatePanel() {
     }
 
     void tick();
-    const id = window.setInterval(() => void tick(), 1000);
+    const id = window.setInterval(() => void tick(), 5_000);
 
     return () => {
       cancelled = true;
@@ -48,51 +44,21 @@ export function StorageEstimatePanel() {
 
   return (
     <section class="storage-widget" aria-live="polite">
-      <h3 class="storage-widget-title">Storage estimate</h3>
-      <p class="storage-widget-note">
-        Origin usage (IndexedDB, caches, etc.) via <code>navigator.storage</code>.
-      </p>
+      <h3 class="storage-widget-title">Database size</h3>
+      <p class="storage-widget-note">SQLite on OPFS</p>
       {state.status === "loading" && (
         <p class="storage-widget-value storage-widget-muted">Measuring…</p>
-      )}
-      {state.status === "unsupported" && (
-        <p class="storage-widget-value storage-widget-muted">Not available in this context.</p>
       )}
       {state.status === "error" && (
         <p class="storage-widget-value storage-widget-error">{state.message}</p>
       )}
       {state.status === "ready" && (
-        <>
-          <div class="storage-widget-rows">
-            <div class="storage-widget-row">
-              <span>Used</span>
-              <span class="storage-widget-mono">{formatBytes(state.usage)}</span>
-            </div>
-            <div class="storage-widget-row">
-              <span>Quota</span>
-              <span class="storage-widget-mono">
-                {state.quota > 0 ? formatBytes(state.quota) : "—"}
-              </span>
-            </div>
+        <div class="storage-widget-rows">
+          <div class="storage-widget-row">
+            <span>Size</span>
+            <span class="storage-widget-mono">{formatBytes(state.sizeBytes)}</span>
           </div>
-          {state.quota > 0 && (
-            <div
-              class="storage-bar"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(Math.min(100, (state.usage / state.quota) * 100))}
-              aria-label="Share of storage quota in use"
-            >
-              <div
-                class="storage-bar-fill"
-                style={{
-                  width: `${Math.min(100, (state.usage / state.quota) * 100)}%`,
-                }}
-              />
-            </div>
-          )}
-        </>
+        </div>
       )}
     </section>
   );

@@ -97,3 +97,7 @@ export async function getGamesByUuids(uuids: string[]): Promise<Map<string, Game
 export async function clearGamesStore(): Promise<void> {
   await request({ type: "CLEAR" });
 }
+
+export async function getDbSize(): Promise<number> {
+  return (await request<number>({ type: "GET_DB_SIZE" })) ?? 0;
+}
