@@ -146,7 +146,6 @@ button:hover {
 }
 
 .storage-widget {
-  margin-top: auto;
   padding-top: 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
@@ -219,6 +218,130 @@ button:hover {
   border-radius: 3px;
   background: linear-gradient(90deg, var(--primary), #ff8a9b);
   transition: width 0.35s ease;
+}
+
+/* ─── elo range filter ─── */
+
+.elo-filter {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.elo-filter-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.elo-filter-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.elo-filter-value {
+  min-width: 2.5rem;
+}
+
+.elo-filter-labels .elo-filter-value:last-child {
+  text-align: right;
+}
+
+.dual-range {
+  position: relative;
+  height: 24px;
+}
+
+.dual-range-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.dual-range-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  background: var(--primary);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.dual-range-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.dual-range-input::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+}
+
+.dual-range-input::-moz-range-track {
+  height: 4px;
+  background: transparent;
+  border: none;
+}
+
+.dual-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--surface);
+  cursor: pointer;
+  pointer-events: all;
+  margin-top: -6px;
+  box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.25);
+  transition: box-shadow 0.15s;
+}
+
+.dual-range-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--surface);
+  cursor: pointer;
+  pointer-events: all;
+  box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.25);
+  transition: box-shadow 0.15s;
+}
+
+.dual-range-input::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 4px rgba(233, 69, 96, 0.35);
+}
+
+.dual-range-input::-moz-range-thumb:hover {
+  box-shadow: 0 0 0 4px rgba(233, 69, 96, 0.35);
+}
+
+.dual-range-input--high {
+  z-index: 1;
 }
 
 /* ─── sidebar status ─── */

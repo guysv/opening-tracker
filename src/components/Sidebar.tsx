@@ -1,9 +1,15 @@
+import type { EloRange } from "../lib/explorerData";
+import { EloRangeSlider } from "./EloRangeSlider";
 import { ImportStatusPanel, type ImportActivitySnapshot } from "./ImportStatusPanel";
 import { StorageEstimatePanel } from "./StorageEstimatePanel";
 
 type SidebarProps = {
   importActivity: ImportActivitySnapshot | null;
   status: string;
+  eloRange: EloRange;
+  eloSliderActive: boolean;
+  onEloRangeChange: (range: EloRange) => void;
+  onEloSliderActiveChange: (active: boolean) => void;
   onImport: (username: string, monthsBack: number) => void;
   onClear: () => void;
 };
@@ -11,6 +17,10 @@ type SidebarProps = {
 export function Sidebar({
   importActivity,
   status,
+  eloRange,
+  eloSliderActive,
+  onEloRangeChange,
+  onEloSliderActiveChange,
   onImport,
   onClear,
 }: SidebarProps) {
@@ -58,6 +68,8 @@ export function Sidebar({
       {importActivity ? <ImportStatusPanel activity={importActivity} /> : null}
 
       <p class="sidebar-status">{status}</p>
+
+      <EloRangeSlider value={eloRange} onChange={onEloRangeChange} onActiveChange={onEloSliderActiveChange} />
 
       <StorageEstimatePanel />
     </aside>

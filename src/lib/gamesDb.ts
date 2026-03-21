@@ -28,6 +28,8 @@ export type GameRecord = {
   username: string;
   whiteUsername: string;
   blackUsername: string;
+  whiteRating: number | null;
+  blackRating: number | null;
   endTime: number | null;
   timeClass: string | null;
   rated: boolean | null;
@@ -60,9 +62,11 @@ export type ChessArchiveGame = {
   time_control?: unknown;
   white?: {
     username?: unknown;
+    rating?: unknown;
   };
   black?: {
     username?: unknown;
+    rating?: unknown;
   };
 };
 
@@ -304,6 +308,8 @@ export function toGameRecord(game: ChessArchiveGame, username: string): GameReco
     username,
     whiteUsername: asString(game.white?.username) ?? "",
     blackUsername: asString(game.black?.username) ?? "",
+    whiteRating: asNumber(game.white?.rating),
+    blackRating: asNumber(game.black?.rating),
     endTime: asNumber(game.end_time),
     timeClass: asString(game.time_class),
     rated: asBoolean(game.rated),

@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 
 import { useExplorerLocation } from "../hooks/useExplorerLocation";
 import {
-  fetchAggregatedMoves,
+  fetchPositionData,
+  filterPositionData,
   previewHoveredMove,
   replayMoves,
   startPositionHash,
   type AggregatedMove,
   type ColorFilter,
+  type EloRange,
+  type PositionData,
 } from "../lib/explorerData";
 import { navigateTo } from "../lib/explorerUrl";
 import { ChessBoard } from "./ChessBoard";
@@ -27,11 +30,11 @@ function winPct(m: AggregatedMove): string | null {
   return `${Math.round((m.wins / decided) * 100)}%`;
 }
 
-function ResultBar({ move, maxGames }: { move: AggregatedMove; maxGames: number }) {
+function ResultBar({ move, maxGames, fullWidth }: { move: AggregatedMove; maxGames: number; fullWidth?: boolean }) {
   const total = move.wins + move.draws + move.losses;
   if (total === 0) return null;
 
-  const barWidthPct = maxGames > 0 ? (move.games / maxGames) * 100 : 100;
+  const barWidthPct = fullWidth ? 100 : (maxGames > 0 ? (move.games / maxGames) * 100 : 100);
   const mateWinPct = (move.mateWins / total) * 100;
   const trapWinPct = (move.trapWins / total) * 100;
   const plainWinPct = ((move.wins - move.trapWins - move.mateWins) / total) * 100;
@@ -49,9 +52,15 @@ function ResultBar({ move, maxGames }: { move: AggregatedMove; maxGames: number 
   );
 }
 
-export function OpeningTracker() {
+type OpeningTrackerProps = {
+  eloRange: EloRange;
+  eloSliderActive: boolean;
+  gamesDataRevision: number;
+};
+
+export function OpeningTracker({ eloRange, eloSliderActive, gamesDataRevision }: OpeningTrackerProps) {
   const loc = useExplorerLocation();
-  const [moves, setMoves] = useState<AggregatedMove[]>([]);
+  const [posData, setPosData] = useState<PositionData | null>(null);
   const [colorFilter, setColorFilter] = useState<ColorFilter>("w");
   const [previewSan, setPreviewSan] = useState<string | null>(null);
 
@@ -70,11 +79,21 @@ export function OpeningTracker() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchAggregatedMoves(posHash, colorFilter).then((result) => {
-      if (!cancelled) setMoves(result);
+    fetchPositionData(posHash).then((data) => {
+      if (!cancelled) setPosData(data);
     });
     return () => { cancelled = true; };
-  }, [posHash, colorFilter]);
+  }, [posHash, gamesDataRevision]);
+
+  const eloMin = eloRange[0];
+  const eloMax = eloRange[1];
+
+  const moves = useMemo<AggregatedMove[]>(() => {
+    if (!posData) return [];
+    const range: EloRange | null =
+      eloMin === 0 && eloMax === 3500 ? null : [eloMin, eloMax];
+    return filterPositionData(posData, colorFilter, range);
+  }, [posData, colorFilter, eloMin, eloMax]);
 
   function handleMoveClick(move: AggregatedMove) {
     navigateTo(move.fenHashAfter, [...loc.via, move.san]);
@@ -92,6 +111,7 @@ export function OpeningTracker() {
 
   const hasResults = moves.some((m) => m.wins + m.draws + m.losses > 0);
   const maxGames = moves.reduce((max, m) => Math.max(max, m.games), 0);
+  const eloFilterActive = eloSliderActive || eloMin !== 0 || eloMax !== 3500;
 
   return (
     <main class="explorer">
@@ -198,7 +218,7 @@ export function OpeningTracker() {
                     </td>
                     {hasResults && (
                       <td class="moves-result">
-                        <ResultBar move={m} maxGames={maxGames} />
+                        <ResultBar move={m} maxGames={maxGames} fullWidth={eloFilterActive} />
                       </td>
                     )}
                     {hasResults && (

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 
 import { clearGamesStore } from "../lib/gamesDb";
+import type { EloRange } from "../lib/explorerData";
 import type { ImportActivitySnapshot } from "./ImportStatusPanel";
 import { OpeningTracker } from "./OpeningTracker";
 import { Sidebar } from "./Sidebar";
+
+const DEFAULT_ELO_RANGE: EloRange = [0, 3500];
 
 type WorkerResponse =
   | {
@@ -33,6 +36,9 @@ export function App() {
   const [importActivity, setImportActivity] = useState<ImportActivitySnapshot | null>(
     null,
   );
+  const [eloRange, setEloRange] = useState<EloRange>(DEFAULT_ELO_RANGE);
+  const [eloSliderActive, setEloSliderActive] = useState(false);
+  const [gamesDataRevision, setGamesDataRevision] = useState(0);
   const worker = useMemo(
     () =>
       new Worker(new URL("../workers/gameImport.worker.js", import.meta.url), {
@@ -48,6 +54,7 @@ export function App() {
       if (message.type === "IMPORT_SUCCESS") {
         const { username, importedCount, monthsBack } = message.payload;
         setImportActivity(null);
+        setGamesDataRevision((n) => n + 1);
         setStatus(
           `Imported ${importedCount} games for ${username} (last ${monthsBack} month${monthsBack === 1 ? "" : "s"}).`,
         );
@@ -136,6 +143,7 @@ export function App() {
   async function handleCleanDb() {
     try {
       await clearGamesStore();
+      setGamesDataRevision((n) => n + 1);
       setStatus("IndexedDB games table cleared.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown clear error.";
@@ -148,10 +156,18 @@ export function App() {
       <Sidebar
         importActivity={importActivity}
         status={status}
+        eloRange={eloRange}
+        eloSliderActive={eloSliderActive}
+        onEloRangeChange={setEloRange}
+        onEloSliderActiveChange={setEloSliderActive}
         onImport={handleImport}
         onClear={handleCleanDb}
       />
-      <OpeningTracker />
+      <OpeningTracker
+        eloRange={eloRange}
+        eloSliderActive={eloSliderActive}
+        gamesDataRevision={gamesDataRevision}
+      />
     </div>
   );
 }

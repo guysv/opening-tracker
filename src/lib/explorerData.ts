@@ -1,8 +1,11 @@
 import BitboardChess from "bitboard-chess";
+import pgnParser from "pgn-parser";
 
 import { sanForEngine } from "./gameMoves";
-import { getGamesByUuids, getMovesForPosition, type MoveRecord } from "./gamesDb";
+import { getGamesByUuids, getMovesForPosition, type GameRecord, type MoveRecord } from "./gamesDb";
 import { inferUserColor } from "./gameMoves";
+
+export type EloRange = [number, number];
 
 function zobristKeyToHex(key: bigint): string {
   return key.toString(16).padStart(16, "0");
@@ -128,25 +131,85 @@ export function aggregateMoves(records: MoveRecord[], colorFilter: ColorFilter =
     .sort((a, b) => b.games - a.games);
 }
 
-async function withInferredUserColor(records: MoveRecord[]): Promise<MoveRecord[]> {
-  const needGameIds = [...new Set(records.filter((r) => r.userColor === undefined).map((r) => r.gameId))];
-  if (needGameIds.length === 0) {
-    return records;
+function extractEloFromPgn(pgn: string | null): { whiteElo: number | null; blackElo: number | null } {
+  if (!pgn) return { whiteElo: null, blackElo: null };
+  try {
+    const parsed = pgnParser.parse(pgn);
+    const firstGame = Array.isArray(parsed) ? parsed[0] : null;
+    const headers = firstGame && Array.isArray(firstGame.headers) ? firstGame.headers : [];
+    let whiteElo: number | null = null;
+    let blackElo: number | null = null;
+    for (const h of headers) {
+      if (!h || typeof h.name !== "string" || typeof h.value !== "string") continue;
+      const name = h.name.toLowerCase();
+      if (name === "whiteelo") { const n = Number(h.value); if (Number.isFinite(n)) whiteElo = n; }
+      else if (name === "blackelo") { const n = Number(h.value); if (Number.isFinite(n)) blackElo = n; }
+    }
+    return { whiteElo, blackElo };
+  } catch { return { whiteElo: null, blackElo: null }; }
+}
+
+const pgnEloCache = new Map<string, { whiteElo: number | null; blackElo: number | null }>();
+
+function getGameRatings(g: GameRecord): { whiteRating: number | null; blackRating: number | null } {
+  if (g.whiteRating != null || g.blackRating != null) {
+    return { whiteRating: g.whiteRating, blackRating: g.blackRating };
   }
+  let cached = pgnEloCache.get(g.uuid);
+  if (!cached) {
+    cached = extractEloFromPgn(g.pgn);
+    pgnEloCache.set(g.uuid, cached);
+  }
+  return { whiteRating: cached.whiteElo, blackRating: cached.blackElo };
+}
 
-  const games = await getGamesByUuids(needGameIds);
+function opponentRating(r: MoveRecord, g: GameRecord): number | null {
+  const ratings = getGameRatings(g);
+  const rating = r.userColor === "w" ? ratings.blackRating : ratings.whiteRating;
+  return rating ?? null;
+}
 
-  return records.map((r) => {
+export type PositionData = {
+  records: MoveRecord[];
+  games: Map<string, GameRecord>;
+};
+
+export async function fetchPositionData(posHash: string): Promise<PositionData> {
+  const records = await getMovesForPosition(posHash);
+  const gameIds = [...new Set(records.map((r) => r.gameId))];
+  const games = gameIds.length > 0 ? await getGamesByUuids(gameIds) : new Map<string, GameRecord>();
+
+  const enriched = records.map((r) => {
     if (r.userColor !== undefined) return r;
     const g = games.get(r.gameId);
     if (!g) return r;
     const userColor = inferUserColor(g);
     return userColor ? { ...r, userColor } : r;
   });
+
+  // Warm PGN elo cache eagerly so subsequent filterPositionData calls are instant
+  for (const g of games.values()) getGameRatings(g);
+
+  return { records: enriched, games };
 }
 
-export async function fetchAggregatedMoves(posHash: string, colorFilter: ColorFilter = "w"): Promise<AggregatedMove[]> {
-  const records = await getMovesForPosition(posHash);
-  const enriched = await withInferredUserColor(records);
-  return aggregateMoves(enriched, colorFilter);
+export function filterPositionData(
+  data: PositionData,
+  colorFilter: ColorFilter,
+  eloRange: EloRange | null,
+): AggregatedMove[] {
+  let filtered = data.records;
+
+  if (eloRange) {
+    const [minElo, maxElo] = eloRange;
+    filtered = filtered.filter((r) => {
+      const g = data.games.get(r.gameId);
+      if (!g) return true;
+      const rating = opponentRating(r, g);
+      if (rating == null) return true;
+      return rating >= minElo && rating <= maxElo;
+    });
+  }
+
+  return aggregateMoves(filtered, colorFilter);
 }
