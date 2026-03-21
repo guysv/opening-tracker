@@ -37,7 +37,7 @@ export function App() {
     null,
   );
   const [eloRange, setEloRange] = useState<EloRange>(DEFAULT_ELO_RANGE);
-  const [eloSliderActive, setEloSliderActive] = useState(false);
+  const [expandResultBars, setExpandResultBars] = useState(false);
   const [gamesDataRevision, setGamesDataRevision] = useState(0);
   const worker = useMemo(
     () =>
@@ -114,6 +114,39 @@ export function App() {
     };
   }, [worker]);
 
+  useEffect(() => {
+    function isEditableTarget(target: EventTarget | null): boolean {
+      if (!target || !(target instanceof HTMLElement)) return false;
+      if (target.isContentEditable) return true;
+      const tag = target.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Shift" || e.repeat) return;
+      if (isEditableTarget(e.target)) return;
+      setExpandResultBars(true);
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key !== "Shift") return;
+      setExpandResultBars(false);
+    }
+
+    function onWindowBlur() {
+      setExpandResultBars(false);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onWindowBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onWindowBlur);
+    };
+  }, []);
+
   function handleImport(username: string, monthsBack: number) {
     const normalizedUsername = username.trim().toLowerCase();
 
@@ -157,15 +190,13 @@ export function App() {
         importActivity={importActivity}
         status={status}
         eloRange={eloRange}
-        eloSliderActive={eloSliderActive}
         onEloRangeChange={setEloRange}
-        onEloSliderActiveChange={setEloSliderActive}
         onImport={handleImport}
         onClear={handleCleanDb}
       />
       <OpeningTracker
         eloRange={eloRange}
-        eloSliderActive={eloSliderActive}
+        expandResultBars={expandResultBars}
         gamesDataRevision={gamesDataRevision}
       />
     </div>

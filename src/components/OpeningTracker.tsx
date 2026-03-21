@@ -54,14 +54,14 @@ function ResultBar({ move, maxGames, fullWidth }: { move: AggregatedMove; maxGam
 
 type OpeningTrackerProps = {
   eloRange: EloRange;
-  eloSliderActive: boolean;
+  expandResultBars: boolean;
   gamesDataRevision: number;
 };
 
-export function OpeningTracker({ eloRange, eloSliderActive, gamesDataRevision }: OpeningTrackerProps) {
+export function OpeningTracker({ eloRange, expandResultBars, gamesDataRevision }: OpeningTrackerProps) {
   const loc = useExplorerLocation();
   const [posData, setPosData] = useState<PositionData | null>(null);
-  const [colorFilter, setColorFilter] = useState<ColorFilter>("w");
+  const colorFilter = loc.color;
   const [previewSan, setPreviewSan] = useState<string | null>(null);
 
   const replay = useMemo(() => replayMoves(loc.via), [loc.via]);
@@ -96,22 +96,26 @@ export function OpeningTracker({ eloRange, eloSliderActive, gamesDataRevision }:
   }, [posData, colorFilter, eloMin, eloMax]);
 
   function handleMoveClick(move: AggregatedMove) {
-    navigateTo(move.fenHashAfter, [...loc.via, move.san]);
+    navigateTo(move.fenHashAfter, [...loc.via, move.san], colorFilter);
   }
 
   function handleBreadcrumbClick(plyIndex: number) {
     if (plyIndex < 0) {
-      navigateTo(startPositionHash(), []);
+      navigateTo(startPositionHash(), [], colorFilter);
     } else {
       const truncatedVia = loc.via.slice(0, plyIndex + 1);
       const r = replayMoves(truncatedVia);
-      navigateTo(r.posHash, truncatedVia);
+      navigateTo(r.posHash, truncatedVia, colorFilter);
     }
+  }
+
+  function setColorFilter(next: ColorFilter) {
+    if (next === colorFilter) return;
+    navigateTo(replay.posHash, loc.via, next, { replace: true });
   }
 
   const hasResults = moves.some((m) => m.wins + m.draws + m.losses > 0);
   const maxGames = moves.reduce((max, m) => Math.max(max, m.games), 0);
-  const eloFilterActive = eloSliderActive || eloMin !== 0 || eloMax !== 3500;
 
   return (
     <main class="explorer">
@@ -218,7 +222,7 @@ export function OpeningTracker({ eloRange, eloSliderActive, gamesDataRevision }:
                     </td>
                     {hasResults && (
                       <td class="moves-result">
-                        <ResultBar move={m} maxGames={maxGames} fullWidth={eloFilterActive} />
+                        <ResultBar move={m} maxGames={maxGames} fullWidth={expandResultBars} />
                       </td>
                     )}
                     {hasResults && (

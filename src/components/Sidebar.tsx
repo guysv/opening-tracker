@@ -7,9 +7,7 @@ type SidebarProps = {
   importActivity: ImportActivitySnapshot | null;
   status: string;
   eloRange: EloRange;
-  eloSliderActive: boolean;
   onEloRangeChange: (range: EloRange) => void;
-  onEloSliderActiveChange: (active: boolean) => void;
   onImport: (username: string, monthsBack: number) => void;
   onClear: () => void;
 };
@@ -18,9 +16,7 @@ export function Sidebar({
   importActivity,
   status,
   eloRange,
-  eloSliderActive,
   onEloRangeChange,
-  onEloSliderActiveChange,
   onImport,
   onClear,
 }: SidebarProps) {
@@ -69,7 +65,7 @@ export function Sidebar({
 
       <p class="sidebar-status">{status}</p>
 
-      <EloRangeSlider value={eloRange} onChange={onEloRangeChange} onActiveChange={onEloSliderActiveChange} />
+      <EloRangeSlider value={eloRange} onChange={onEloRangeChange} />
 
       <StorageEstimatePanel />
     </aside>

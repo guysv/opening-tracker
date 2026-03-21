@@ -7,10 +7,9 @@ const STEP = 50;
 type EloRangeSliderProps = {
   value: EloRange;
   onChange: (range: EloRange) => void;
-  onActiveChange?: (active: boolean) => void;
 };
 
-export function EloRangeSlider({ value, onChange, onActiveChange }: EloRangeSliderProps) {
+export function EloRangeSlider({ value, onChange }: EloRangeSliderProps) {
   const [low, high] = value;
 
   const lowPct = ((low - MIN_ELO) / (MAX_ELO - MIN_ELO)) * 100;
@@ -23,12 +22,7 @@ export function EloRangeSlider({ value, onChange, onActiveChange }: EloRangeSlid
         <span class="elo-filter-value">{low}</span>
         <span class="elo-filter-value">{high}</span>
       </div>
-      <div
-        class="dual-range"
-        onPointerDown={() => onActiveChange?.(true)}
-        onPointerUp={() => onActiveChange?.(false)}
-        onPointerCancel={() => onActiveChange?.(false)}
-      >
+      <div class="dual-range">
         <div class="dual-range-track" />
         <div
           class="dual-range-fill"
