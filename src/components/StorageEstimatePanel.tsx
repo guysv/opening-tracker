@@ -1,5 +1,5 @@
-import { useEffect, useState } from "preact/hooks";
-import { getDbSize } from "../lib/dbClient";
+import { useCallback, useEffect, useState } from "preact/hooks";
+import { exportDb, getDbSize } from "../lib/dbClient";
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
@@ -19,6 +19,7 @@ type PanelState =
 
 export function StorageEstimatePanel() {
   const [state, setState] = useState<PanelState>({ status: "loading" });
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +43,22 @@ export function StorageEstimatePanel() {
     };
   }, []);
 
+  const handleDownload = useCallback(async () => {
+    setDownloading(true);
+    try {
+      const bytes = await exportDb();
+      const blob = new Blob([bytes], { type: "application/x-sqlite3" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "opening-tracker.db";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(false);
+    }
+  }, []);
+
   return (
     <section class="storage-widget" aria-live="polite">
       <h3 class="storage-widget-title">Database size</h3>
@@ -58,6 +75,13 @@ export function StorageEstimatePanel() {
             <span>Size</span>
             <span class="storage-widget-mono">{formatBytes(state.sizeBytes)}</span>
           </div>
+          <button
+            class="storage-widget-download"
+            onClick={handleDownload}
+            disabled={downloading}
+          >
+            {downloading ? "Exporting…" : "Download .db"}
+          </button>
         </div>
       )}
     </section>

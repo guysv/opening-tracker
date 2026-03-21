@@ -101,3 +101,7 @@ export async function clearGamesStore(): Promise<void> {
 export async function getDbSize(): Promise<number> {
   return (await request<number>({ type: "GET_DB_SIZE" })) ?? 0;
 }
+
+export async function exportDb(): Promise<Uint8Array> {
+  return await request<Uint8Array>({ type: "EXPORT_DB" });
+}

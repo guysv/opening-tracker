@@ -205,6 +205,28 @@ button:hover {
   font-size: 0.85rem;
 }
 
+.storage-widget-download {
+  margin-top: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.storage-widget-download:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.storage-widget-download:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .storage-bar {
   height: 6px;
   border-radius: 3px;

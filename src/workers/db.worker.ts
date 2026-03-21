@@ -7,10 +7,16 @@ type RequestMessage =
   | { type: "GET_MOVES_FOR_POSITION"; id: number; fenHash: string }
   | { type: "GET_GAMES_BY_UUIDS"; id: number; uuids: string[] }
   | { type: "CLEAR"; id: number }
-  | { type: "GET_DB_SIZE"; id: number };
+  | { type: "GET_DB_SIZE"; id: number }
+  | { type: "EXPORT_DB"; id: number };
 
-function reply(id: number, result: unknown, error?: string) {
-  self.postMessage(error ? { id, error } : { id, result });
+function reply(id: number, result: unknown, error?: string, transfer?: Transferable[]) {
+  const msg = error ? { id, error } : { id, result };
+  if (transfer?.length) {
+    (self as unknown as Worker).postMessage(msg, transfer);
+  } else {
+    self.postMessage(msg);
+  }
 }
 
 const SCHEMA = `
@@ -55,12 +61,13 @@ CREATE INDEX IF NOT EXISTS idx_moves_gameId ON moves(gameId);
 
 type Database = InstanceType<Sqlite3Static["oo1"]["DB"]>;
 
+let sqlite3: Sqlite3Static;
 let db: Database;
 
 async function initDb() {
   const moduleUrl = new URL("/sqlite3/index.mjs", self.location.href).href;
   const { default: sqlite3InitModule } = await import(moduleUrl);
-  const sqlite3: Sqlite3Static = await sqlite3InitModule();
+  sqlite3 = await sqlite3InitModule();
 
   const poolUtil = await sqlite3.installOpfsSAHPoolVfs({
     initialCapacity: 6,
@@ -139,6 +146,10 @@ function clearAll() {
   db.exec("DELETE FROM moves; DELETE FROM games; VACUUM;");
 }
 
+function exportDb(): Uint8Array {
+  return sqlite3.capi.sqlite3_js_db_export(db);
+}
+
 function getDbSize(): number {
   const pageCount = db.exec("PRAGMA page_count", { returnValue: "resultRows" })[0][0] as number;
   const pageSize = db.exec("PRAGMA page_size", { returnValue: "resultRows" })[0][0] as number;
@@ -170,6 +181,11 @@ initDb()
           case "GET_DB_SIZE":
             reply(msg.id, getDbSize());
             break;
+          case "EXPORT_DB": {
+            const bytes = exportDb();
+            reply(msg.id, bytes, undefined, [bytes.buffer]);
+            break;
+          }
         }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
