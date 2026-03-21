@@ -1,7 +1,6 @@
 import {
   parseChessComPgnOnce,
   toGameRecord,
-  upsertGamesWithMoves,
   type ChessArchiveGame,
   type GameRecord,
   type MoveRecord,
@@ -265,20 +264,14 @@ self.onmessage = async (event: MessageEvent<ImportRequestMessage>) => {
     // Mid-game replay failures still produce partial rows and are kept.
     const entriesWithMoves = entries.filter((e) => e.moves.length > 0);
 
-    postProgress({ phase: "save" });
-    await upsertGamesWithMoves(entriesWithMoves);
-
-    const payload: ImportSuccessMessage = {
-      type: "IMPORT_SUCCESS",
+    self.postMessage({
+      type: "IMPORT_ENTRIES",
       payload: {
         username: normalizedUsername,
-        importedCount: entriesWithMoves.length,
+        entries: entriesWithMoves,
         monthsBack,
       },
-    };
-
-    console.log("Import successful", payload);
-    self.postMessage(payload);
+    });
   } catch (error) {
     const messageText = error instanceof Error ? error.message : "Unknown import error.";
     console.error("Import error:", messageText);

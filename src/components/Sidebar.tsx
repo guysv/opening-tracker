@@ -57,7 +57,7 @@ export function Sidebar({
 
         <button type="submit">Import</button>
         <button type="button" onClick={onClear}>
-          Clean IndexedDB
+          Clear Database
         </button>
       </form>
 

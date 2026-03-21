@@ -1,9 +1,9 @@
 import BitboardChess from "bitboard-chess";
 import pgnParser from "pgn-parser";
 
-import { sanForEngine } from "./gameMoves";
-import { getGamesByUuids, getMovesForPosition, type GameRecord, type MoveRecord } from "./gamesDb";
-import { inferUserColor } from "./gameMoves";
+import { sanForEngine, inferUserColor } from "./gameMoves";
+import { getGamesByUuids, getMovesForPosition } from "./dbClient";
+import type { GameRecord, MoveRecord } from "./gamesDb";
 
 export type EloRange = [number, number];
 

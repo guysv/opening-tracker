@@ -4,10 +4,10 @@ import pgnParser from "pgn-parser";
 import type { GameRecord, MoveRecord, ParseChessComPgnResult } from "./gamesDb";
 import { resolveStartFen, STANDARD_START_PLACEMENT } from "./startFen";
 
-/** Half-moves (plies) kept per game in IndexedDB (opening slice only). */
+/** Half-moves (plies) kept per game (opening slice only). */
 export const MAX_STORED_PLIES = 30;
 
-/** Digits for `id` suffix so `IDBKeyRange` per game works (see plan). */
+/** Digits for the `id` suffix (zero-padded move index within a game). */
 const MOVE_INDEX_PAD = 5;
 
 const NAG_SUFFIXES = ["!!", "??", "!?", "?!", "!", "?"] as const;

@@ -1,4 +1,5 @@
 import { $ } from "bun";
+import { resolve } from "path";
 
 const startMs = performance.now();
 
@@ -9,12 +10,12 @@ const result = await Bun.build({
     "src/index.html",
     "src/workers/gameImport.worker.ts",
     "src/workers/gameParse.worker.ts",
+    "src/workers/db.worker.ts",
   ],
   outdir: "dist",
   minify: true,
   splitting: true,
   sourcemap: "linked",
-  // Stable worker filename so `new URL("../workers/gameImport.worker.js", import.meta.url)` matches dist (Bun does not rewrite Worker URLs to content hashes).
   naming: {
     entry: "[dir]/[name].[ext]",
     chunk: "[name]-[hash].[ext]",
@@ -29,6 +30,9 @@ if (!result.success) {
   }
   process.exit(1);
 }
+
+const sqliteDist = resolve("node_modules/@sqlite.org/sqlite-wasm/dist");
+await $`mkdir -p dist/sqlite3 && cp ${sqliteDist}/index.mjs ${sqliteDist}/sqlite3.wasm dist/sqlite3/`;
 
 const elapsed = (performance.now() - startMs).toFixed(0);
 console.log(`Build complete in ${elapsed}ms — ${result.outputs.length} files written to dist/`);

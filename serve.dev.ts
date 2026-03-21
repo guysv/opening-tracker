@@ -25,6 +25,7 @@ const server = Bun.serve({
         "src/index.html",
         "src/workers/gameImport.worker.ts",
         "src/workers/gameParse.worker.ts",
+        "src/workers/db.worker.ts",
       ],
       outdir: "dist",
       sourcemap: "inline",
@@ -35,6 +36,12 @@ const server = Bun.serve({
       return new Response(`<pre style="color:red">${Bun.escapeHTML(errors)}</pre>`, {
         headers: { "Content-Type": "text/html" },
       });
+    }
+
+    if (!(await Bun.file("dist/sqlite3/index.mjs").exists())) {
+      const src = "node_modules/@sqlite.org/sqlite-wasm/dist";
+      await Bun.write("dist/sqlite3/index.mjs", Bun.file(`${src}/index.mjs`));
+      await Bun.write("dist/sqlite3/sqlite3.wasm", Bun.file(`${src}/sqlite3.wasm`));
     }
 
     let path = url.pathname === "/" ? "/index.html" : url.pathname;

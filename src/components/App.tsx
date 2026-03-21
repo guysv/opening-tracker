@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
-import { clearGamesStore } from "../lib/gamesDb";
+import { clearGamesStore, initDb, upsertGamesWithMoves } from "../lib/dbClient";
+import type { GameRecord, MoveRecord } from "../lib/gamesDb";
 import type { EloRange } from "../lib/explorerData";
 import type { ImportActivitySnapshot } from "./ImportStatusPanel";
 import { OpeningTracker } from "./OpeningTracker";
@@ -10,10 +11,10 @@ const DEFAULT_ELO_RANGE: EloRange = [0, 3500];
 
 type WorkerResponse =
   | {
-      type: "IMPORT_SUCCESS";
+      type: "IMPORT_ENTRIES";
       payload: {
         username: string;
-        importedCount: number;
+        entries: { record: GameRecord; moves: MoveRecord[] }[];
         monthsBack: number;
       };
     }
@@ -27,18 +28,18 @@ type WorkerResponse =
       type: "IMPORT_PROGRESS";
       payload:
         | { phase: "download"; current: number; total: number }
-        | { phase: "parse"; current: number; total: number }
-        | { phase: "save" };
+        | { phase: "parse"; current: number; total: number };
     };
 
 export function App() {
-  const [status, setStatus] = useState("Ready to import games.");
+  const [status, setStatus] = useState("Initializing database...");
   const [importActivity, setImportActivity] = useState<ImportActivitySnapshot | null>(
     null,
   );
   const [eloRange, setEloRange] = useState<EloRange>(DEFAULT_ELO_RANGE);
   const [expandResultBars, setExpandResultBars] = useState(false);
   const [gamesDataRevision, setGamesDataRevision] = useState(0);
+  const dbReadyRef = useRef(false);
   const worker = useMemo(
     () =>
       new Worker(new URL("../workers/gameImport.worker.js", import.meta.url), {
@@ -48,16 +49,39 @@ export function App() {
   );
 
   useEffect(() => {
+    initDb()
+      .then(() => {
+        dbReadyRef.current = true;
+        setStatus("Ready to import games.");
+      })
+      .catch((e) => {
+        setStatus(`DB init failed: ${e instanceof Error ? e.message : String(e)}`);
+      });
+  }, []);
+
+  useEffect(() => {
     function handleWorkerMessage(event: MessageEvent<WorkerResponse>) {
       const message = event.data;
 
-      if (message.type === "IMPORT_SUCCESS") {
-        const { username, importedCount, monthsBack } = message.payload;
-        setImportActivity(null);
-        setGamesDataRevision((n) => n + 1);
-        setStatus(
-          `Imported ${importedCount} games for ${username} (last ${monthsBack} month${monthsBack === 1 ? "" : "s"}).`,
+      if (message.type === "IMPORT_ENTRIES") {
+        const { username, entries, monthsBack } = message.payload;
+        setImportActivity((prev) =>
+          prev
+            ? { ...prev, saving: true, savingStartedAt: prev.savingStartedAt ?? Date.now() }
+            : null,
         );
+        upsertGamesWithMoves(entries)
+          .then(() => {
+            setImportActivity(null);
+            setGamesDataRevision((n) => n + 1);
+            setStatus(
+              `Imported ${entries.length} games for ${username} (last ${monthsBack} month${monthsBack === 1 ? "" : "s"}).`,
+            );
+          })
+          .catch((e) => {
+            setImportActivity(null);
+            setStatus(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
+          });
         return;
       }
 
@@ -97,11 +121,7 @@ export function App() {
               savingStartedAt: null,
             };
           }
-          return {
-            ...base,
-            saving: true,
-            savingStartedAt: base.savingStartedAt ?? Date.now(),
-          };
+          return base;
         });
       }
     }
@@ -148,6 +168,11 @@ export function App() {
   }, []);
 
   function handleImport(username: string, monthsBack: number) {
+    if (!dbReadyRef.current) {
+      setStatus("Database is not ready yet. Please wait.");
+      return;
+    }
+
     const normalizedUsername = username.trim().toLowerCase();
 
     if (!normalizedUsername) {
@@ -177,10 +202,10 @@ export function App() {
     try {
       await clearGamesStore();
       setGamesDataRevision((n) => n + 1);
-      setStatus("IndexedDB games table cleared.");
+      setStatus("Database cleared.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown clear error.";
-      setStatus(`Failed to clear IndexedDB: ${message}`);
+      setStatus(`Failed to clear database: ${message}`);
     }
   }
 
