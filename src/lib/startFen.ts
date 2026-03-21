@@ -25,6 +25,27 @@ function headerMapFromPgn(pgn: string): Map<string, string> | null {
 }
 
 /**
+ * Like `resolveStartFen` but reuses a precomputed `[Setup]`/`[FEN]` header map (one `pgn-parser` pass).
+ */
+export function resolveStartFenFromHeaderMap(
+  headerMap: Map<string, string> | null,
+  hasPgn: boolean,
+  initialSetup: string | null,
+): string | null {
+  if (hasPgn && headerMap) {
+    const setup = headerMap.get("setup");
+    const fenHeader = headerMap.get("fen");
+    if (setup === "1" && fenHeader) {
+      return fenHeader;
+    }
+  }
+  if (initialSetup) {
+    return initialSetup;
+  }
+  return null;
+}
+
+/**
  * Start FEN for replay from move 1:
  * 1. PGN `[SetUp "1"]` + `[FEN "…"]`
  * 2. Chess.com `initial_setup`. Do **not** use API top-level `fen` (final position).
@@ -34,11 +55,7 @@ export function resolveStartFen(pgn: string | null, initialSetup: string | null)
   if (pgn) {
     const headers = headerMapFromPgn(pgn);
     if (headers) {
-      const setup = headers.get("setup");
-      const fenHeader = headers.get("fen");
-      if (setup === "1" && fenHeader) {
-        return fenHeader;
-      }
+      return resolveStartFenFromHeaderMap(headers, true, initialSetup);
     }
   }
   if (initialSetup) {
@@ -63,8 +80,16 @@ function castlingTokenIsStandard(token: string | undefined): boolean {
  * Keep only games that start from the normal chess position with a parseable, standard FEN.
  * Drops Chess960, from-position, malformed FEN, and castling fields `bitboard-chess` cannot hash.
  */
-export function isStandardImportStart(pgn: string | null, initialSetup: string | null): boolean {
-  const fen = resolveStartFen(pgn, initialSetup);
+export function isStandardImportStart(
+  pgn: string | null,
+  initialSetup: string | null,
+  /** When set, skips an extra `pgn-parser` pass inside `resolveStartFen`. */
+  headerMap?: Map<string, string> | null,
+): boolean {
+  const fen =
+    headerMap != null
+      ? resolveStartFenFromHeaderMap(headerMap, Boolean(pgn && pgn.length > 0), initialSetup)
+      : resolveStartFen(pgn, initialSetup);
   if (fen == null) {
     return true;
   }

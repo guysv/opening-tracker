@@ -251,6 +251,48 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" ? value : null;
 }
 
+/** Result of a single `pgn-parser` pass on the archive PGN (import hot path). */
+export type ParseChessComPgnResult = {
+  headerMap: Map<string, string>;
+  headers: Array<{ name: string; value: string }>;
+  mainLineSans: string[];
+};
+
+/** One parse for headers + main-line SANs; used to avoid 3–4 parses per game during import. */
+export function parseChessComPgnOnce(pgn: string): ParseChessComPgnResult | null {
+  try {
+    const parsed = pgnParser.parse(pgn);
+    const firstGame = Array.isArray(parsed) ? parsed[0] : null;
+    if (!firstGame) {
+      return null;
+    }
+
+    const rawHeaders = Array.isArray(firstGame.headers) ? firstGame.headers : [];
+    const headerMap = new Map<string, string>();
+    const headers: Array<{ name: string; value: string }> = [];
+
+    for (const header of rawHeaders) {
+      if (!header || typeof header.name !== "string" || typeof header.value !== "string") {
+        continue;
+      }
+      headerMap.set(header.name.toLowerCase(), header.value);
+      headers.push({ name: header.name, value: header.value });
+    }
+
+    const mainLineSans: string[] = [];
+    for (const node of firstGame.moves ?? []) {
+      const m = node.move;
+      if (typeof m === "string" && m.length > 0) {
+        mainLineSans.push(m);
+      }
+    }
+
+    return { headerMap, headers, mainLineSans };
+  } catch {
+    return null;
+  }
+}
+
 function parsePgnHeaders(pgn: string | null): {
   timeControl: string | null;
   site: string | null;
@@ -285,7 +327,12 @@ function parsePgnHeaders(pgn: string | null): {
   }
 }
 
-export function toGameRecord(game: ChessArchiveGame, username: string): GameRecord | null {
+export function toGameRecord(
+  game: ChessArchiveGame,
+  username: string,
+  /** When provided, skips redundant `pgn-parser` work (import worker). */
+  parsedOnce?: ParseChessComPgnResult | null,
+): GameRecord | null {
   const uuid = asString(game.uuid);
   const url = asString(game.url);
 
@@ -296,11 +343,22 @@ export function toGameRecord(game: ChessArchiveGame, username: string): GameReco
   const pgn = asString(game.pgn);
   const initialSetup = asString(game.initial_setup);
 
-  if (!isStandardImportStart(pgn, initialSetup)) {
+  if (parsedOnce) {
+    if (!isStandardImportStart(pgn, initialSetup, parsedOnce.headerMap)) {
+      return null;
+    }
+  } else if (!isStandardImportStart(pgn, initialSetup)) {
     return null;
   }
 
-  const pgnHeaders = parsePgnHeaders(pgn);
+  const pgnHeaders = parsedOnce
+    ? {
+        timeControl: parsedOnce.headerMap.get("timecontrol") ?? null,
+        site: parsedOnce.headerMap.get("site") ?? null,
+        event: parsedOnce.headerMap.get("event") ?? null,
+        result: parsedOnce.headerMap.get("result") ?? null,
+      }
+    : parsePgnHeaders(pgn);
 
   return {
     uuid,

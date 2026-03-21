@@ -1,7 +1,7 @@
 import BitboardChess from "bitboard-chess";
 import pgnParser from "pgn-parser";
 
-import type { GameRecord, MoveRecord } from "./gamesDb";
+import type { GameRecord, MoveRecord, ParseChessComPgnResult } from "./gamesDb";
 import { resolveStartFen, STANDARD_START_PLACEMENT } from "./startFen";
 
 /** Half-moves (plies) kept per game in IndexedDB (opening slice only). */
@@ -103,12 +103,17 @@ function formatSansAsMovetext(sans: string[]): string {
 }
 
 /** Headers unchanged; movetext is only the first `maxPlies` half-moves. */
-export function truncateGamePgnForStorage(pgn: string | null, maxPlies = MAX_STORED_PLIES): string | null {
+export function truncateGamePgnForStorage(
+  pgn: string | null,
+  maxPlies = MAX_STORED_PLIES,
+  /** When set, avoids extra `pgn-parser` passes (same object as `parseChessComPgnOnce`). */
+  cached?: Pick<ParseChessComPgnResult, "mainLineSans" | "headers"> | null,
+): string | null {
   if (!pgn) {
     return null;
   }
 
-  const fullSans = extractMainLineSans(pgn);
+  const fullSans = cached?.mainLineSans ?? extractMainLineSans(pgn);
   const sans = fullSans.slice(0, maxPlies);
 
   if (sans.length === 0 || sans.length === fullSans.length) {
@@ -116,9 +121,13 @@ export function truncateGamePgnForStorage(pgn: string | null, maxPlies = MAX_STO
   }
 
   try {
-    const parsed = pgnParser.parse(pgn);
-    const firstGame = Array.isArray(parsed) ? parsed[0] : null;
-    const headers = firstGame?.headers ?? [];
+    const headers =
+      cached?.headers ??
+      (() => {
+        const parsed = pgnParser.parse(pgn);
+        const firstGame = Array.isArray(parsed) ? parsed[0] : null;
+        return firstGame?.headers ?? [];
+      })();
     const lines: string[] = [];
     let resultToken = "*";
 
@@ -142,8 +151,14 @@ export function truncateGamePgnForStorage(pgn: string | null, maxPlies = MAX_STO
   }
 }
 
-export function truncateGameRecordForStorage(record: GameRecord): GameRecord {
-  return { ...record, pgn: truncateGamePgnForStorage(record.pgn) };
+export function truncateGameRecordForStorage(
+  record: GameRecord,
+  parsedOnce?: ParseChessComPgnResult | null,
+): GameRecord {
+  const cached = parsedOnce
+    ? { mainLineSans: parsedOnce.mainLineSans, headers: parsedOnce.headers }
+    : undefined;
+  return { ...record, pgn: truncateGamePgnForStorage(record.pgn, MAX_STORED_PLIES, cached) };
 }
 
 export function inferUserColor(

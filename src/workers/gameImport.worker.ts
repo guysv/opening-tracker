@@ -1,9 +1,11 @@
 import {
+  parseChessComPgnOnce,
   toGameRecord,
   upsertGamesWithMoves,
   type ChessArchiveGame,
   type GameRecord,
   type MoveRecord,
+  type ParseChessComPgnResult,
 } from "../lib/gamesDb";
 import { truncateGameRecordForStorage } from "../lib/gameMoves";
 
@@ -199,13 +201,13 @@ self.onmessage = async (event: MessageEvent<ImportRequestMessage>) => {
 
     for (let i = 0; i < paths.length; i++) {
       const archivePath = paths[i]!;
-      postProgress({ phase: "download", current: i + 1, total: paths.length });
       const archiveUrl = `https://api.chess.com/pub/player/${normalizedUsername}/games/${archivePath}`;
       console.log(`Fetching archive: ${archiveUrl}`);
       const response = await fetch(archiveUrl);
 
       if (response.status === 404) {
         console.log(`No archive for ${archivePath} (404), skipping.`);
+        postProgress({ phase: "download", current: i + 1, total: paths.length });
         continue;
       }
 
@@ -227,12 +229,30 @@ self.onmessage = async (event: MessageEvent<ImportRequestMessage>) => {
       }
 
       allGames.push(...(data.games as ChessArchiveGame[]));
+      postProgress({ phase: "download", current: i + 1, total: paths.length });
     }
 
-    const records = allGames
-      .map((game) => toGameRecord(game, normalizedUsername))
-      .filter((record): record is NonNullable<typeof record> => record !== null)
-      .map(truncateGameRecordForStorage);
+    const filteredRecords: GameRecord[] = [];
+    const truncateCaches: Array<ParseChessComPgnResult | undefined> = [];
+
+    for (const game of allGames) {
+      const pgn =
+        typeof game.pgn === "string" && game.pgn.length > 0 ? game.pgn : null;
+      const parsedOnce = pgn ? parseChessComPgnOnce(pgn) : null;
+      const record = toGameRecord(
+        game,
+        normalizedUsername,
+        parsedOnce ?? undefined,
+      );
+      if (record) {
+        filteredRecords.push(record);
+        truncateCaches.push(parsedOnce ?? undefined);
+      }
+    }
+
+    const records = filteredRecords.map((record, idx) =>
+      truncateGameRecordForStorage(record, truncateCaches[idx]),
+    );
 
     console.log(`Mapped ${records.length} valid records from ${monthsBack} month(s).`);
 
