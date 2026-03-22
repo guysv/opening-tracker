@@ -40,7 +40,14 @@ export function EvalBar({ evalData, loading, error }: EvalBarProps) {
   return (
     <div class="eval-bar-wrap" aria-label="Engine evaluation">
       <div class="eval-bar-track">
-        <div class="eval-bar-marker" style={{ bottom: `${pct}%` }} />
+        <div
+          class="eval-bar-fill eval-bar-fill--light"
+          style={{ height: `${100 - pct}%` }}
+        />
+        <div
+          class="eval-bar-fill eval-bar-fill--dark"
+          style={{ height: `${pct}%` }}
+        />
       </div>
       <div class="eval-bar-label">
         {error ? "!" : loading ? "…" : label}

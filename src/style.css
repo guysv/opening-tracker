@@ -541,26 +541,28 @@ button:hover {
 }
 
 .eval-bar-track {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   width: 22px;
+  height: calc(8 * 52px + 1.75rem);
   min-height: calc(8 * 52px + 1.75rem);
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(to top, #141820 0%, #141820 50%, #e8e4dc 50%, #e8e4dc 100%);
+  overflow: hidden;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 
-.eval-bar-marker {
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  height: 4px;
-  margin-bottom: -2px;
-  background: var(--primary);
-  border-radius: 2px;
-  box-shadow: 0 0 6px rgba(233, 69, 96, 0.65);
-  transform: translateY(50%);
-  pointer-events: none;
+.eval-bar-fill {
+  flex-shrink: 0;
+  transition: height 0.2s ease;
+}
+
+.eval-bar-fill--light {
+  background: #e8e4dc;
+}
+
+.eval-bar-fill--dark {
+  background: #141820;
 }
 
 .eval-bar-label {
