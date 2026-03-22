@@ -18,6 +18,7 @@ import {
   analyzePosition,
   formatMoveEvalDiff,
   moveEvalDiffAdvantage,
+  moveIsMoverBlunder,
   type MoveEvalDiffAdvantage,
   type StockfishDisplayEval,
 } from "../lib/stockfishEval";
@@ -64,7 +65,7 @@ function ResultBar({ move, maxGames, fullWidth }: { move: AggregatedMove; maxGam
 
 type MoveEvalDiffEntry =
   | { status: "pending" }
-  | { status: "ready"; text: string; advantage: MoveEvalDiffAdvantage }
+  | { status: "ready"; text: string; advantage: MoveEvalDiffAdvantage; blunder: boolean }
   | { status: "error" };
 
 function moveEvalDiffLabel(entry: MoveEvalDiffEntry | undefined): string {
@@ -293,7 +294,7 @@ export function OpeningTracker({ eloRange, expandResultBars, gamesDataRevision }
         if (!preview) {
           setMoveEvalDiffs((prev) => ({
             ...prev,
-            [m.fenHashAfter]: { status: "ready", text: "—", advantage: "neutral" },
+            [m.fenHashAfter]: { status: "ready", text: "—", advantage: "neutral", blunder: false },
           }));
           continue;
         }
@@ -335,9 +336,10 @@ export function OpeningTracker({ eloRange, expandResultBars, gamesDataRevision }
         if (cancelled || !child) return;
         const text = formatMoveEvalDiff(parent, child);
         const advantage = moveEvalDiffAdvantage(parent, child);
+        const blunder = moveIsMoverBlunder(parent, child, replay.sideToMove);
         setMoveEvalDiffs((prev) => ({
           ...prev,
-          [m.fenHashAfter]: { status: "ready", text, advantage },
+          [m.fenHashAfter]: { status: "ready", text, advantage, blunder },
         }));
       }
     })();
@@ -346,7 +348,7 @@ export function OpeningTracker({ eloRange, expandResultBars, gamesDataRevision }
       cancelled = true;
       ac.abort();
     };
-  }, [loc.via, moves, replay.error, sfError, sfEval, sfLoading]);
+  }, [loc.via, moves, replay.error, replay.sideToMove, sfError, sfEval, sfLoading]);
 
   function handleMoveClick(move: AggregatedMove) {
     navigateTo(move.fenHashAfter, [...loc.via, move.san], colorFilter);
@@ -469,10 +471,16 @@ export function OpeningTracker({ eloRange, expandResultBars, gamesDataRevision }
                 </tr>
               </thead>
               <tbody>
-                {moves.map((m) => (
+                {moves.map((m) => {
+                  const diff = moveEvalDiffs[m.fenHashAfter];
+                  const blunderRow =
+                    diff?.status === "ready" &&
+                    diff.blunder &&
+                    colorFilter === replay.sideToMove;
+                  return (
                   <tr
                     key={m.san}
-                    class={`moves-row ${previewSan === m.san ? "moves-row--preview" : ""}`}
+                    class={`moves-row ${previewSan === m.san ? "moves-row--preview" : ""} ${blunderRow ? "moves-row--blunder" : ""}`}
                     onClick={() => handleMoveClick(m)}
                     onMouseEnter={() => setPreviewSan(m.san)}
                   >
@@ -496,7 +504,8 @@ export function OpeningTracker({ eloRange, expandResultBars, gamesDataRevision }
                       <td class="moves-winpct">{winPct(m) ?? "—"}</td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

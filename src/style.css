@@ -38,7 +38,7 @@ body {
   position: fixed;
   top: 0;
   left: 0;
-  width: 300px;
+  width: 200px;
   height: 100dvh;
   background: var(--surface);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
@@ -87,7 +87,7 @@ button:hover {
 }
 
 .content {
-  margin-left: 300px;
+  margin-left: 200px;
   min-height: 100dvh;
   display: grid;
   place-content: center;
@@ -377,7 +377,7 @@ button:hover {
 /* ─── explorer ─── */
 
 .explorer {
-  margin-left: 300px;
+  margin-left: 200px;
   min-height: 100dvh;
   padding: 1.5rem 2rem;
   display: flex;
@@ -701,6 +701,24 @@ button:hover {
 }
 
 .moves-row.moves-row--preview:hover {
+  background: rgba(37, 99, 235, 0.26);
+}
+
+.moves-row--blunder {
+  background: rgba(127, 29, 29, 0.14);
+  box-shadow: inset 3px 0 0 rgba(220, 38, 38, 0.55);
+}
+
+.moves-row--blunder:hover {
+  background: rgba(127, 29, 29, 0.22);
+}
+
+.moves-row--blunder.moves-row--preview {
+  background: rgba(37, 99, 235, 0.2);
+  box-shadow: inset 3px 0 0 rgba(220, 38, 38, 0.72);
+}
+
+.moves-row--blunder.moves-row--preview:hover {
   background: rgba(37, 99, 235, 0.26);
 }
 

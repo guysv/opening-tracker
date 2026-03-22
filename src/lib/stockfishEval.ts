@@ -285,6 +285,30 @@ export function formatMoveEvalDiff(
 
 export type MoveEvalDiffAdvantage = "white" | "black" | "neutral";
 
+const DEFAULT_BLUNDER_CP = 150;
+
+/**
+ * True if the move loses at least `thresholdCp` for the side that played it, or walks into
+ * forced mate against them. Parent/child evals are White-centric (see `uciScoreToWhiteCentipawns`).
+ */
+export function moveIsMoverBlunder(
+  parent: StockfishDisplayEval,
+  child: StockfishDisplayEval,
+  sideToMove: "w" | "b",
+  thresholdCp: number = DEFAULT_BLUNDER_CP,
+): boolean {
+  if (child.kind === "mate" && child.mate != null && child.mate !== 0) {
+    if (sideToMove === "w" && child.mate < 0) return true;
+    if (sideToMove === "b" && child.mate > 0) return true;
+  }
+  if (parent.kind === "cp" && child.kind === "cp" && parent.cp != null && child.cp != null) {
+    const loss =
+      sideToMove === "w" ? parent.cp - child.cp : child.cp - parent.cp;
+    return loss >= thresholdCp;
+  }
+  return false;
+}
+
 /** Whether the move improves White’s eval, Black’s, or is flat (White-centric parent/child). */
 export function moveEvalDiffAdvantage(
   parent: StockfishDisplayEval,
