@@ -1,11 +1,14 @@
 import type { Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 
+import type { StockfishEvalRecord } from "../lib/stockfishEval";
 import type { GameRecord, MoveRecord } from "../lib/gamesDb";
 
 type RequestMessage =
   | { type: "UPSERT_GAMES_WITH_MOVES"; id: number; entries: { record: GameRecord; moves: MoveRecord[] }[] }
   | { type: "GET_MOVES_FOR_POSITION"; id: number; fenHash: string }
   | { type: "GET_GAMES_BY_UUIDS"; id: number; uuids: string[] }
+  | { type: "GET_STOCKFISH_EVAL"; id: number; fenHash: string }
+  | { type: "UPSERT_STOCKFISH_EVAL"; id: number; row: StockfishEvalRecord }
   | { type: "CLEAR"; id: number }
   | { type: "GET_DB_SIZE"; id: number }
   | { type: "EXPORT_DB"; id: number };
@@ -57,6 +60,14 @@ CREATE INDEX IF NOT EXISTS idx_games_endTime ON games(endTime);
 CREATE INDEX IF NOT EXISTS idx_moves_fenHashBefore ON moves(fenHashBefore);
 CREATE INDEX IF NOT EXISTS idx_moves_fenHashBefore_san ON moves(fenHashBefore, san);
 CREATE INDEX IF NOT EXISTS idx_moves_gameId ON moves(gameId);
+CREATE TABLE IF NOT EXISTS stockfish_eval (
+  fen_hash TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('cp', 'mate')),
+  cp INTEGER,
+  mate INTEGER,
+  depth INTEGER,
+  evaluated_at INTEGER NOT NULL
+);
 `;
 
 type Database = InstanceType<Sqlite3Static["oo1"]["DB"]>;
@@ -142,8 +153,38 @@ function getGamesByUuids(uuids: string[]): GameRecord[] {
   }) as unknown as GameRecord[];
 }
 
+function getStockfishEval(fenHash: string): StockfishEvalRecord | null {
+  const rows = db.exec("SELECT * FROM stockfish_eval WHERE fen_hash = ?", {
+    bind: [fenHash],
+    rowMode: "object",
+    returnValue: "resultRows",
+  }) as unknown as StockfishEvalRecord[];
+  return rows[0] ?? null;
+}
+
+function upsertStockfishEval(row: StockfishEvalRecord) {
+  const stmt = db.prepare(
+    `INSERT OR REPLACE INTO stockfish_eval (fen_hash, kind, cp, mate, depth, evaluated_at)
+     VALUES (?,?,?,?,?,?)`,
+  );
+  try {
+    stmt
+      .bind([
+        row.fen_hash,
+        row.kind,
+        row.cp,
+        row.mate,
+        row.depth,
+        row.evaluated_at,
+      ])
+      .stepReset();
+  } finally {
+    stmt.finalize();
+  }
+}
+
 function clearAll() {
-  db.exec("DELETE FROM moves; DELETE FROM games; VACUUM;");
+  db.exec("DELETE FROM moves; DELETE FROM games; DELETE FROM stockfish_eval; VACUUM;");
 }
 
 function exportDb(): Uint8Array {
@@ -173,6 +214,13 @@ initDb()
             break;
           case "GET_GAMES_BY_UUIDS":
             reply(msg.id, getGamesByUuids(msg.uuids));
+            break;
+          case "GET_STOCKFISH_EVAL":
+            reply(msg.id, getStockfishEval(msg.fenHash));
+            break;
+          case "UPSERT_STOCKFISH_EVAL":
+            upsertStockfishEval(msg.row);
+            reply(msg.id, null);
             break;
           case "CLEAR":
             clearAll();

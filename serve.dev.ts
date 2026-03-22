@@ -44,6 +44,12 @@ const server = Bun.serve({
       await Bun.write("dist/sqlite3/sqlite3.wasm", Bun.file(`${src}/sqlite3.wasm`));
     }
 
+    if (!(await Bun.file("dist/stockfish/stockfish-18-lite-single.js").exists())) {
+      const sf = "node_modules/stockfish/bin";
+      await Bun.write("dist/stockfish/stockfish-18-lite-single.js", Bun.file(`${sf}/stockfish-18-lite-single.js`));
+      await Bun.write("dist/stockfish/stockfish-18-lite-single.wasm", Bun.file(`${sf}/stockfish-18-lite-single.wasm`));
+    }
+
     let path = url.pathname === "/" ? "/index.html" : url.pathname;
     const file = Bun.file(`dist${path}`);
 
@@ -66,7 +72,8 @@ const server = Bun.serve({
       path.includes(".") ||
       path.startsWith("/workers/") ||
       path.startsWith("/chunk-") ||
-      path.startsWith("/index-");
+      path.startsWith("/index-") ||
+      path.startsWith("/stockfish/");
 
     if (isAssetRequest) {
       return new Response("Not found", { status: 404 });

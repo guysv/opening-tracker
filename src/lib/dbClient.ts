@@ -1,4 +1,5 @@
 import type { GameRecord, MoveRecord } from "./gamesDb";
+import type { StockfishEvalRecord } from "./stockfishEval";
 
 type PendingRequest = {
   resolve: (value: unknown) => void;
@@ -81,6 +82,14 @@ export async function upsertGamesWithMoves(
 
 export async function getMovesForPosition(fenHash: string): Promise<MoveRecord[]> {
   return (await request<MoveRecord[]>({ type: "GET_MOVES_FOR_POSITION", fenHash })) ?? [];
+}
+
+export async function getStockfishEval(fenHash: string): Promise<StockfishEvalRecord | null> {
+  return (await request<StockfishEvalRecord | null>({ type: "GET_STOCKFISH_EVAL", fenHash })) ?? null;
+}
+
+export async function upsertStockfishEval(row: StockfishEvalRecord): Promise<void> {
+  await request({ type: "UPSERT_STOCKFISH_EVAL", row });
 }
 
 export async function getGamesByUuids(uuids: string[]): Promise<Map<string, GameRecord>> {
