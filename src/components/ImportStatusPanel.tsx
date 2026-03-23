@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 
 export type ImportActivitySnapshot = {
+  username: string;
   downloadCurrent: number;
   downloadTotal: number;
   parseCurrent: number | null;
@@ -53,6 +54,7 @@ function SavingElapsedLabel({ saving, savingStartedAt }: SavingElapsedProps) {
 
 export function ImportStatusPanel({ activity }: ImportStatusPanelProps) {
   const {
+    username,
     downloadCurrent,
     downloadTotal,
     parseCurrent,
@@ -76,7 +78,7 @@ export function ImportStatusPanel({ activity }: ImportStatusPanelProps) {
 
   return (
     <div class="import-status-widget" aria-live="polite">
-      <div class="import-status-widget-title">Import status</div>
+      <div class="import-status-widget-title">Import: {username}</div>
       <ul class="import-status-widget-list">
         <li
           class={

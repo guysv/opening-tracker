@@ -3,15 +3,39 @@ import type { Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import type { StockfishEvalRecord } from "../lib/stockfishEval";
 import type { GameRecord, MoveRecord } from "../lib/gamesDb";
 
+type ArchiveUpsertRow = {
+  username: string;
+  path: string;
+  fetchedAt: number;
+  gzipJson: Uint8Array;
+  /** HTTP `Last-Modified` from the archive response (metadata; browser cannot send `If-Modified-Since` to chess.com). */
+  lastModified: string | null;
+};
+
+type PlayerListRow = {
+  username: string;
+  gameCount: number;
+  minArchivePath: string | null;
+  maxArchivePath: string | null;
+  lastSyncAt: number | null;
+  /** `YYYY/MM` from earliest game `endTime` (UTC), for extend when no archives yet. */
+  minGameEndMonth: string | null;
+};
+
 type RequestMessage =
   | { type: "UPSERT_GAMES_WITH_MOVES"; id: number; entries: { record: GameRecord; moves: MoveRecord[] }[] }
-  | { type: "GET_MOVES_FOR_POSITION"; id: number; fenHash: string }
+  | { type: "GET_MOVES_FOR_POSITION"; id: number; fenHash: string; includeUsernames?: string[] }
   | { type: "GET_GAMES_BY_UUIDS"; id: number; uuids: string[] }
   | { type: "GET_STOCKFISH_EVAL"; id: number; fenHash: string }
   | { type: "UPSERT_STOCKFISH_EVAL"; id: number; row: StockfishEvalRecord }
   | { type: "CLEAR"; id: number }
   | { type: "GET_DB_SIZE"; id: number }
-  | { type: "EXPORT_DB"; id: number };
+  | { type: "EXPORT_DB"; id: number }
+  | { type: "UPSERT_ARCHIVES"; id: number; rows: ArchiveUpsertRow[] }
+  | { type: "GET_ARCHIVES_LAST_MODIFIED_FOR_USER"; id: number; username: string }
+  | { type: "TOUCH_PLAYER_SYNC"; id: number; username: string; syncedAt: number }
+  | { type: "LIST_PLAYERS"; id: number }
+  | { type: "DELETE_PLAYER"; id: number; username: string };
 
 function reply(id: number, result: unknown, error?: string, transfer?: Transferable[]) {
   const msg = error ? { id, error } : { id, result };
@@ -68,6 +92,19 @@ CREATE TABLE IF NOT EXISTS stockfish_eval (
   depth INTEGER,
   evaluated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS archives (
+  username TEXT NOT NULL,
+  path TEXT NOT NULL,
+  fetched_at INTEGER NOT NULL,
+  gzip_json BLOB NOT NULL,
+  last_modified TEXT,
+  PRIMARY KEY (username, path)
+);
+CREATE INDEX IF NOT EXISTS idx_archives_username ON archives(username);
+CREATE TABLE IF NOT EXISTS player_sync_meta (
+  username TEXT PRIMARY KEY,
+  last_sync_at INTEGER
+);
 `;
 
 type Database = InstanceType<Sqlite3Static["oo1"]["DB"]>;
@@ -88,6 +125,46 @@ async function initDb() {
 
   db = new poolUtil.OpfsSAHPoolDb("/opening-tracker.db");
   db.exec(SCHEMA);
+  migrateArchivesBlobColumn();
+  migrateArchivesLastModifiedColumn();
+}
+
+/** Older builds used `body`; keep one-file backups coherent by renaming to `gzip_json`. */
+function migrateArchivesBlobColumn() {
+  let cols: { name: string }[];
+  try {
+    cols = db.exec("PRAGMA table_info(archives)", {
+      rowMode: "object",
+      returnValue: "resultRows",
+    }) as unknown as { name: string }[];
+  } catch {
+    return;
+  }
+  if (!Array.isArray(cols) || cols.length === 0) return;
+  const names = new Set(cols.map((c) => c.name));
+  if (names.has("body") && !names.has("gzip_json")) {
+    db.exec("ALTER TABLE archives RENAME COLUMN body TO gzip_json");
+  }
+}
+
+function migrateArchivesLastModifiedColumn() {
+  let cols: { name: string }[];
+  try {
+    cols = db.exec("PRAGMA table_info(archives)", {
+      rowMode: "object",
+      returnValue: "resultRows",
+    }) as unknown as { name: string }[];
+  } catch {
+    return;
+  }
+  if (!Array.isArray(cols) || cols.length === 0) return;
+  const names = new Set(cols.map((c) => c.name));
+  if (names.has("last_modified")) return;
+  if (names.has("etag")) {
+    db.exec("ALTER TABLE archives RENAME COLUMN etag TO last_modified");
+    return;
+  }
+  db.exec("ALTER TABLE archives ADD COLUMN last_modified TEXT");
 }
 
 function upsertGamesWithMoves(entries: { record: GameRecord; moves: MoveRecord[] }[]) {
@@ -135,7 +212,21 @@ function upsertGamesWithMoves(entries: { record: GameRecord; moves: MoveRecord[]
   }
 }
 
-function getMovesForPosition(fenHash: string): MoveRecord[] {
+function getMovesForPosition(fenHash: string, includeUsernames?: string[]): MoveRecord[] {
+  if (includeUsernames !== undefined && includeUsernames.length === 0) {
+    return [];
+  }
+  if (includeUsernames !== undefined && includeUsernames.length > 0) {
+    const placeholders = includeUsernames.map(() => "?").join(",");
+    const sql = `SELECT m.* FROM moves m
+      INNER JOIN games g ON g.uuid = m.gameId
+      WHERE m.fenHashBefore = ? AND g.username IN (${placeholders})`;
+    return db.exec(sql, {
+      bind: [fenHash, ...includeUsernames],
+      rowMode: "object",
+      returnValue: "resultRows",
+    }) as unknown as MoveRecord[];
+  }
   return db.exec("SELECT * FROM moves WHERE fenHashBefore = ?", {
     bind: [fenHash],
     rowMode: "object",
@@ -183,8 +274,118 @@ function upsertStockfishEval(row: StockfishEvalRecord) {
   }
 }
 
+function upsertArchives(rows: ArchiveUpsertRow[]) {
+  if (rows.length === 0) return;
+  const stmt = db.prepare(
+    `INSERT OR REPLACE INTO archives (username, path, fetched_at, gzip_json, last_modified) VALUES (?,?,?,?,?)`,
+  );
+  try {
+    for (const r of rows) {
+      stmt
+        .bind(1, r.username)
+        .bind(2, r.path)
+        .bind(3, r.fetchedAt)
+        .bindAsBlob(4, r.gzipJson)
+        .bind(5, r.lastModified ?? null)
+        .stepReset();
+    }
+  } finally {
+    stmt.finalize();
+  }
+}
+
+/** `path` → stored HTTP `Last-Modified` (or null). Used to skip GET after a matching HEAD. */
+function getArchivesLastModifiedForUser(username: string): Record<string, string | null> {
+  const u = username.trim().toLowerCase();
+  const out: Record<string, string | null> = {};
+  if (!u) return out;
+  const raw = db.exec("SELECT path, last_modified FROM archives WHERE username = ?", {
+    bind: [u],
+    rowMode: "object",
+    returnValue: "resultRows",
+  }) as unknown as Record<string, unknown>[];
+  for (const row of raw) {
+    const path = String(row.path);
+    out[path] =
+      row.last_modified != null && String(row.last_modified).length > 0
+        ? String(row.last_modified)
+        : null;
+  }
+  return out;
+}
+
+function touchPlayerSync(username: string, syncedAt: number) {
+  const u = username.trim().toLowerCase();
+  if (!u || !Number.isFinite(syncedAt)) return;
+  const stmt = db.prepare(
+    `INSERT OR REPLACE INTO player_sync_meta (username, last_sync_at) VALUES (?, ?)`,
+  );
+  try {
+    stmt.bind(1, u).bind(2, Math.floor(syncedAt)).stepReset();
+  } finally {
+    stmt.finalize();
+  }
+}
+
+function listPlayers(): PlayerListRow[] {
+  const sql = `
+    WITH users AS (
+      SELECT DISTINCT username FROM games
+      UNION
+      SELECT DISTINCT username FROM archives
+      UNION
+      SELECT DISTINCT username FROM player_sync_meta
+    )
+    SELECT
+      u.username AS username,
+      (SELECT COUNT(*) FROM games g WHERE g.username = u.username) AS gameCount,
+      (SELECT MIN(a.path) FROM archives a WHERE a.username = u.username) AS minArchivePath,
+      (SELECT MAX(a.path) FROM archives a WHERE a.username = u.username) AS maxArchivePath,
+      COALESCE(
+        (SELECT psm.last_sync_at FROM player_sync_meta psm WHERE psm.username = u.username),
+        (SELECT MAX(a.fetched_at) FROM archives a WHERE a.username = u.username)
+      ) AS lastSyncAt,
+      (SELECT strftime('%Y/%m', datetime(MIN(g.endTime), 'unixepoch')) FROM games g
+        WHERE g.username = u.username AND g.endTime IS NOT NULL) AS minGameEndMonth
+    FROM users u
+    ORDER BY u.username COLLATE NOCASE
+  `;
+  const raw = db.exec(sql, {
+    rowMode: "object",
+    returnValue: "resultRows",
+  }) as unknown as Record<string, unknown>[];
+  return raw.map((row) => ({
+    username: String(row.username),
+    gameCount: Number(row.gameCount) || 0,
+    minArchivePath: row.minArchivePath != null ? String(row.minArchivePath) : null,
+    maxArchivePath: row.maxArchivePath != null ? String(row.maxArchivePath) : null,
+    lastSyncAt: row.lastSyncAt != null ? Number(row.lastSyncAt) : null,
+    minGameEndMonth: row.minGameEndMonth != null ? String(row.minGameEndMonth) : null,
+  }));
+}
+
+function deletePlayer(username: string) {
+  const u = username.trim().toLowerCase();
+  if (!u) return;
+  db.exec("BEGIN");
+  try {
+    db.exec("DELETE FROM moves WHERE gameId IN (SELECT uuid FROM games WHERE username = ?)", {
+      bind: [u],
+    });
+    db.exec("DELETE FROM games WHERE username = ?", { bind: [u] });
+    db.exec("DELETE FROM archives WHERE username = ?", { bind: [u] });
+    db.exec("DELETE FROM player_sync_meta WHERE username = ?", { bind: [u] });
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
+
 function clearAll() {
-  db.exec("DELETE FROM moves; DELETE FROM games; DELETE FROM stockfish_eval; VACUUM;");
+  db.exec(
+    "DELETE FROM moves; DELETE FROM games; DELETE FROM archives; DELETE FROM player_sync_meta; DELETE FROM stockfish_eval; VACUUM;",
+  );
 }
 
 function exportDb(): Uint8Array {
@@ -210,7 +411,7 @@ initDb()
             reply(msg.id, null);
             break;
           case "GET_MOVES_FOR_POSITION":
-            reply(msg.id, getMovesForPosition(msg.fenHash));
+            reply(msg.id, getMovesForPosition(msg.fenHash, msg.includeUsernames));
             break;
           case "GET_GAMES_BY_UUIDS":
             reply(msg.id, getGamesByUuids(msg.uuids));
@@ -234,6 +435,24 @@ initDb()
             reply(msg.id, bytes, undefined, [bytes.buffer]);
             break;
           }
+          case "UPSERT_ARCHIVES":
+            upsertArchives(msg.rows);
+            reply(msg.id, null);
+            break;
+          case "GET_ARCHIVES_LAST_MODIFIED_FOR_USER":
+            reply(msg.id, getArchivesLastModifiedForUser(msg.username));
+            break;
+          case "TOUCH_PLAYER_SYNC":
+            touchPlayerSync(msg.username, msg.syncedAt);
+            reply(msg.id, null);
+            break;
+          case "LIST_PLAYERS":
+            reply(msg.id, listPlayers());
+            break;
+          case "DELETE_PLAYER":
+            deletePlayer(msg.username);
+            reply(msg.id, null);
+            break;
         }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);

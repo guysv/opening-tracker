@@ -99,9 +99,16 @@ type OpeningTrackerProps = {
   eloRange: EloRange;
   expandResultBars: boolean;
   gamesDataRevision: number;
+  /** When set, only moves for these tracked users; `undefined` = no filter (all rows). */
+  includeUsernames?: string[];
 };
 
-export function OpeningTracker({ eloRange, expandResultBars, gamesDataRevision }: OpeningTrackerProps) {
+export function OpeningTracker({
+  eloRange,
+  expandResultBars,
+  gamesDataRevision,
+  includeUsernames,
+}: OpeningTrackerProps) {
   const loc = useExplorerLocation();
   const [posData, setPosData] = useState<PositionData | null>(null);
   const colorFilter = loc.color;
@@ -133,13 +140,21 @@ export function OpeningTracker({ eloRange, expandResultBars, gamesDataRevision }
     setPreviewSan(null);
   }, [loc.via]);
 
+  const includeKey =
+    includeUsernames === undefined ? "\0__all__" : includeUsernames.join("\0");
+
   useEffect(() => {
     let cancelled = false;
-    fetchPositionData(posHash).then((data) => {
+    fetchPositionData(
+      posHash,
+      includeUsernames === undefined ? undefined : includeUsernames,
+    ).then((data) => {
       if (!cancelled) setPosData(data);
     });
-    return () => { cancelled = true; };
-  }, [posHash, gamesDataRevision]);
+    return () => {
+      cancelled = true;
+    };
+  }, [posHash, gamesDataRevision, includeKey]);
 
   useEffect(() => {
     if (replay.error) {

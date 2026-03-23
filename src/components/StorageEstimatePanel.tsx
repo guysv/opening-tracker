@@ -47,7 +47,7 @@ export function StorageEstimatePanel() {
     setDownloading(true);
     try {
       const bytes = await exportDb();
-      const blob = new Blob([bytes], { type: "application/x-sqlite3" });
+      const blob = new Blob([new Uint8Array(bytes)], { type: "application/x-sqlite3" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -61,8 +61,7 @@ export function StorageEstimatePanel() {
 
   return (
     <section class="storage-widget" aria-live="polite">
-      <h3 class="storage-widget-title">Database size</h3>
-      <p class="storage-widget-note">SQLite on OPFS</p>
+      <h3 class="storage-widget-title">Database info</h3>
       {state.status === "loading" && (
         <p class="storage-widget-value storage-widget-muted">Measuring…</p>
       )}

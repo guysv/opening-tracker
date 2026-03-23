@@ -174,8 +174,11 @@ export type PositionData = {
   games: Map<string, GameRecord>;
 };
 
-export async function fetchPositionData(posHash: string): Promise<PositionData> {
-  const records = await getMovesForPosition(posHash);
+export async function fetchPositionData(
+  posHash: string,
+  includeUsernames?: string[],
+): Promise<PositionData> {
+  const records = await getMovesForPosition(posHash, includeUsernames);
   const gameIds = [...new Set(records.map((r) => r.gameId))];
   const games = gameIds.length > 0 ? await getGamesByUuids(gameIds) : new Map<string, GameRecord>();
 

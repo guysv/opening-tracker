@@ -1,6 +1,24 @@
 import type { GameRecord, MoveRecord } from "./gamesDb";
 import type { StockfishEvalRecord } from "./stockfishEval";
 
+export type PlayerListRow = {
+  username: string;
+  gameCount: number;
+  minArchivePath: string | null;
+  maxArchivePath: string | null;
+  lastSyncAt: number | null;
+  minGameEndMonth: string | null;
+};
+
+/** One month archive: raw chess.com JSON response, gzip-compressed, stored as a SQLite BLOB (`archives.gzip_json`). */
+export type ArchiveUpsertRow = {
+  username: string;
+  path: string;
+  fetchedAt: number;
+  gzipJson: Uint8Array;
+  lastModified: string | null;
+};
+
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (reason: Error) => void;
@@ -80,8 +98,15 @@ export async function upsertGamesWithMoves(
   await request({ type: "UPSERT_GAMES_WITH_MOVES", entries });
 }
 
-export async function getMovesForPosition(fenHash: string): Promise<MoveRecord[]> {
-  return (await request<MoveRecord[]>({ type: "GET_MOVES_FOR_POSITION", fenHash })) ?? [];
+export async function getMovesForPosition(
+  fenHash: string,
+  includeUsernames?: string[],
+): Promise<MoveRecord[]> {
+  const msg: Record<string, unknown> = { type: "GET_MOVES_FOR_POSITION", fenHash };
+  if (includeUsernames !== undefined) {
+    msg.includeUsernames = includeUsernames;
+  }
+  return (await request<MoveRecord[]>(msg)) ?? [];
 }
 
 export async function getStockfishEval(fenHash: string): Promise<StockfishEvalRecord | null> {
@@ -105,6 +130,39 @@ export async function getGamesByUuids(uuids: string[]): Promise<Map<string, Game
 
 export async function clearGamesStore(): Promise<void> {
   await request({ type: "CLEAR" });
+}
+
+export async function upsertArchives(rows: ArchiveUpsertRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  await request({ type: "UPSERT_ARCHIVES", rows });
+}
+
+/** Per-archive stored `Last-Modified` (from prior GETs). Keys are `YYYY/MM` paths. */
+export async function getArchivesLastModifiedForUser(
+  username: string,
+): Promise<Record<string, string | null>> {
+  const u = username.trim().toLowerCase();
+  if (!u) return {};
+  return (
+    (await request<Record<string, string | null>>({
+      type: "GET_ARCHIVES_LAST_MODIFIED_FOR_USER",
+      username: u,
+    })) ?? {}
+  );
+}
+
+export async function touchPlayerSync(username: string, syncedAt: number): Promise<void> {
+  const u = username.trim().toLowerCase();
+  if (!u || !Number.isFinite(syncedAt)) return;
+  await request({ type: "TOUCH_PLAYER_SYNC", username: u, syncedAt: Math.floor(syncedAt) });
+}
+
+export async function listPlayers(): Promise<PlayerListRow[]> {
+  return (await request<PlayerListRow[]>({ type: "LIST_PLAYERS" })) ?? [];
+}
+
+export async function deletePlayer(username: string): Promise<void> {
+  await request({ type: "DELETE_PLAYER", username: username.trim().toLowerCase() });
 }
 
 export async function getDbSize(): Promise<number> {
