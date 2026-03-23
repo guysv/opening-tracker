@@ -216,3 +216,52 @@ export function filterPositionData(
 
   return aggregateMoves(filtered, colorFilter);
 }
+
+export type MoveGameListItem = {
+  gameId: string;
+  url: string;
+  whiteUsername: string;
+  blackUsername: string;
+  whiteRating: number | null;
+  blackRating: number | null;
+  outcome: "win" | "draw" | "loss" | null;
+  endTime: number | null;
+};
+
+/** Games that contributed to the aggregated row for `san`, using the same color and Elo filters as the table. */
+export function listGamesForMove(
+  data: PositionData,
+  san: string,
+  colorFilter: ColorFilter,
+  eloRange: EloRange | null,
+): MoveGameListItem[] {
+  let filtered = data.records.filter((r) => r.san === san && r.userColor === colorFilter);
+  if (eloRange) {
+    const [minElo, maxElo] = eloRange;
+    filtered = filtered.filter((r) => {
+      const g = data.games.get(r.gameId);
+      if (!g) return true;
+      const rating = opponentRating(r, g);
+      if (rating == null) return true;
+      return rating >= minElo && rating <= maxElo;
+    });
+  }
+
+  const rows: MoveGameListItem[] = filtered.map((r) => {
+    const g = data.games.get(r.gameId);
+    const ratings = g ? getGameRatings(g) : { whiteRating: null as number | null, blackRating: null as number | null };
+    return {
+      gameId: r.gameId,
+      url: g?.url ?? "",
+      whiteUsername: g?.whiteUsername ?? "?",
+      blackUsername: g?.blackUsername ?? "?",
+      whiteRating: ratings.whiteRating,
+      blackRating: ratings.blackRating,
+      outcome: classifyResult(r.result, r.userColor),
+      endTime: g?.endTime ?? null,
+    };
+  });
+
+  rows.sort((a, b) => (b.endTime ?? 0) - (a.endTime ?? 0));
+  return rows;
+}

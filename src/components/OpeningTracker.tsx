@@ -1,15 +1,18 @@
+import { Fragment } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 
 import { useExplorerLocation } from "../hooks/useExplorerLocation";
 import {
   fetchPositionData,
   filterPositionData,
+  listGamesForMove,
   previewHoveredMove,
   replayMoves,
   startPositionHash,
   type AggregatedMove,
   type ColorFilter,
   type EloRange,
+  type MoveGameListItem,
   type PositionData,
   type ReplayResult,
 } from "../lib/explorerData";
@@ -39,6 +42,24 @@ function winPct(m: AggregatedMove): string | null {
   const decided = m.wins + m.draws + m.losses;
   if (decided === 0) return null;
   return `${Math.round((m.wins / decided) * 100)}%`;
+}
+
+function outcomeShort(o: MoveGameListItem["outcome"]): string {
+  if (o === "win") return "W";
+  if (o === "draw") return "D";
+  if (o === "loss") return "L";
+  return "—";
+}
+
+function outcomeClass(o: MoveGameListItem["outcome"]): string {
+  if (o === "win") return "moves-game-outcome moves-game-outcome--win";
+  if (o === "draw") return "moves-game-outcome moves-game-outcome--draw";
+  if (o === "loss") return "moves-game-outcome moves-game-outcome--loss";
+  return "moves-game-outcome moves-game-outcome--na";
+}
+
+function formatPlayerSide(name: string, rating: number | null): string {
+  return rating != null ? `${name} (${rating})` : name;
 }
 
 function ResultBar({ move, maxGames, fullWidth }: { move: AggregatedMove; maxGames: number; fullWidth?: boolean }) {
@@ -113,6 +134,7 @@ export function OpeningTracker({
   const [posData, setPosData] = useState<PositionData | null>(null);
   const colorFilter = loc.color;
   const [previewSan, setPreviewSan] = useState<string | null>(null);
+  const [expandedSan, setExpandedSan] = useState<string | null>(null);
   const [sfEval, setSfEval] = useState<StockfishDisplayEval | null>(null);
   const [sfLoading, setSfLoading] = useState(false);
   const [sfError, setSfError] = useState(false);
@@ -139,6 +161,10 @@ export function OpeningTracker({
   useEffect(() => {
     setPreviewSan(null);
   }, [loc.via]);
+
+  useEffect(() => {
+    setExpandedSan(null);
+  }, [posHash]);
 
   const includeKey =
     includeUsernames === undefined ? "\0__all__" : includeUsernames.join("\0");
@@ -272,13 +298,19 @@ export function OpeningTracker({
 
   const eloMin = eloRange[0];
   const eloMax = eloRange[1];
+  const eloRangeForFilter = useMemo((): EloRange | null => {
+    return eloMin === 0 && eloMax === 3500 ? null : [eloMin, eloMax];
+  }, [eloMin, eloMax]);
 
   const moves = useMemo<AggregatedMove[]>(() => {
     if (!posData) return [];
-    const range: EloRange | null =
-      eloMin === 0 && eloMax === 3500 ? null : [eloMin, eloMax];
-    return filterPositionData(posData, colorFilter, range);
-  }, [posData, colorFilter, eloMin, eloMax]);
+    return filterPositionData(posData, colorFilter, eloRangeForFilter);
+  }, [posData, colorFilter, eloRangeForFilter]);
+
+  const expandedGames = useMemo((): MoveGameListItem[] => {
+    if (!posData || !expandedSan) return [];
+    return listGamesForMove(posData, expandedSan, colorFilter, eloRangeForFilter);
+  }, [posData, expandedSan, colorFilter, eloRangeForFilter]);
 
   useEffect(() => {
     if (replay.error || moves.length === 0) {
@@ -386,6 +418,7 @@ export function OpeningTracker({
 
   const hasResults = moves.some((m) => m.wins + m.draws + m.losses > 0);
   const maxGames = moves.reduce((max, m) => Math.max(max, m.games), 0);
+  const moveTableColSpan = 2 + (hasResults ? 2 : 0);
 
   return (
     <main class="explorer">
@@ -489,36 +522,86 @@ export function OpeningTracker({
                 {moves.map((m) => {
                   const diff = moveEvalDiffs[m.fenHashAfter];
                   const blunderRow =
-                    diff?.status === "ready" &&
-                    diff.blunder &&
-                    colorFilter === replay.sideToMove;
+                    diff?.status === "ready" && diff.blunder;
+                  const isExpanded = expandedSan === m.san;
                   return (
-                  <tr
-                    key={m.san}
-                    class={`moves-row ${previewSan === m.san ? "moves-row--preview" : ""} ${blunderRow ? "moves-row--blunder" : ""}`}
-                    onClick={() => handleMoveClick(m)}
-                    onMouseEnter={() => setPreviewSan(m.san)}
-                  >
-                    <td class="moves-san">
-                      <span class="moves-san-name">{m.san}</span>
-                      <span
-                        class={moveEvalDiffClass(moveEvalDiffs[m.fenHashAfter])}
+                    <Fragment key={m.san}>
+                      <tr
+                        class={`moves-row ${previewSan === m.san ? "moves-row--preview" : ""} ${blunderRow ? "moves-row--blunder" : ""}`}
+                        onClick={() => handleMoveClick(m)}
+                        onMouseEnter={() => setPreviewSan(m.san)}
                       >
-                        {moveEvalDiffLabel(moveEvalDiffs[m.fenHashAfter])}
-                      </span>
-                    </td>
-                    <td class="moves-games">
-                      <span class="moves-count">{m.games}</span>
-                    </td>
-                    {hasResults && (
-                      <td class="moves-result">
-                        <ResultBar move={m} maxGames={maxGames} fullWidth={expandResultBars} />
-                      </td>
-                    )}
-                    {hasResults && (
-                      <td class="moves-winpct">{winPct(m) ?? "—"}</td>
-                    )}
-                  </tr>
+                        <td class="moves-san">
+                          <span class="moves-san-name">{m.san}</span>
+                          <span
+                            class={moveEvalDiffClass(moveEvalDiffs[m.fenHashAfter])}
+                          >
+                            {moveEvalDiffLabel(moveEvalDiffs[m.fenHashAfter])}
+                          </span>
+                        </td>
+                        <td class="moves-games">
+                          <span class="moves-games-inner">
+                            <span class="moves-count">{m.games}</span>
+                            <button
+                              type="button"
+                              class={`moves-expand-btn ${isExpanded ? "moves-expand-btn--open" : ""}`}
+                              aria-expanded={isExpanded}
+                              aria-label={
+                                isExpanded
+                                  ? "Hide games for this move"
+                                  : "Show all games for this move"
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedSan((s) => (s === m.san ? null : m.san));
+                              }}
+                            >
+                              {isExpanded ? "▾" : "▸"}
+                            </button>
+                          </span>
+                        </td>
+                        {hasResults && (
+                          <td class="moves-result">
+                            <ResultBar move={m} maxGames={maxGames} fullWidth={expandResultBars} />
+                          </td>
+                        )}
+                        {hasResults && (
+                          <td class="moves-winpct">{winPct(m) ?? "—"}</td>
+                        )}
+                      </tr>
+                      {isExpanded ? (
+                        <tr class="moves-expand-row">
+                          <td class="moves-expand-cell" colSpan={moveTableColSpan}>
+                            <ul class="moves-game-list">
+                              {expandedGames.map((g) => (
+                                <li key={g.gameId} class="moves-game-item">
+                                  <span class={outcomeClass(g.outcome)} title="Your result">
+                                    {outcomeShort(g.outcome)}
+                                  </span>
+                                  {g.url ? (
+                                    <a
+                                      class="moves-game-link"
+                                      href={g.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {formatPlayerSide(g.whiteUsername, g.whiteRating)} vs{" "}
+                                      {formatPlayerSide(g.blackUsername, g.blackRating)}
+                                    </a>
+                                  ) : (
+                                    <span class="moves-game-link moves-game-link--muted">
+                                      {formatPlayerSide(g.whiteUsername, g.whiteRating)} vs{" "}
+                                      {formatPlayerSide(g.blackUsername, g.blackRating)}
+                                    </span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>
