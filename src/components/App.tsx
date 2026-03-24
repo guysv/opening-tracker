@@ -16,6 +16,7 @@ import {
 import type { GameRecord, MoveRecord } from "../lib/gamesDb";
 import type { EloRange } from "../lib/explorerData";
 import type { ImportActivitySnapshot } from "./ImportStatusPanel";
+import { BookmarkSidebar } from "./BookmarkSidebar";
 import { OpeningTracker } from "./OpeningTracker";
 import { Sidebar } from "./Sidebar";
 
@@ -54,6 +55,7 @@ export function App() {
   const [players, setPlayers] = useState<PlayerListRow[]>([]);
   const [bootDone, setBootDone] = useState(false);
   const [disabledUsernames, setDisabledUsernames] = useState<Record<string, boolean>>({});
+  const [bookmarksRevision, setBookmarksRevision] = useState(0);
 
   const dbReadyRef = useRef(false);
   const importBusyRef = useRef(false);
@@ -386,6 +388,10 @@ export function App() {
     return players.map((p) => p.username).filter((u) => !disabledUsernames[u]);
   }, [bootDone, players, disabledUsernames]);
 
+  const bumpBookmarks = useCallback(() => {
+    setBookmarksRevision((n) => n + 1);
+  }, []);
+
   return (
     <div class="layout">
       <Sidebar
@@ -407,6 +413,15 @@ export function App() {
         expandResultBars={expandResultBars}
         gamesDataRevision={gamesDataRevision}
         includeUsernames={includeUsernames}
+        bookmarksRevision={bookmarksRevision}
+        onBookmarkToggle={bumpBookmarks}
+      />
+      <BookmarkSidebar
+        eloRange={eloRange}
+        gamesDataRevision={gamesDataRevision}
+        includeUsernames={includeUsernames}
+        bookmarksRevision={bookmarksRevision}
+        onBookmarksChanged={bumpBookmarks}
       />
     </div>
   );

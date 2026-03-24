@@ -1,5 +1,5 @@
 import { Fragment } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { useExplorerLocation } from "../hooks/useExplorerLocation";
 import {
@@ -16,7 +16,14 @@ import {
   type PositionData,
   type ReplayResult,
 } from "../lib/explorerData";
-import { getStockfishEval, upsertStockfishEval } from "../lib/dbClient";
+import { defaultBookmarkNameFromVia } from "../lib/bookmarkLabel";
+import {
+  addBookmark,
+  getStockfishEval,
+  listBookmarks,
+  removeBookmark,
+  upsertStockfishEval,
+} from "../lib/dbClient";
 import {
   analyzePosition,
   formatMoveEvalDiff,
@@ -25,9 +32,10 @@ import {
   type MoveEvalDiffAdvantage,
   type StockfishDisplayEval,
 } from "../lib/stockfishEval";
-import { navigateTo } from "../lib/explorerUrl";
+import { buildFragment, navigateTo } from "../lib/explorerUrl";
 import { ChessBoard } from "./ChessBoard";
 import { EvalBar } from "./EvalBar";
+import { MoveResultBar } from "./MoveResultBar";
 
 function formatBreadcrumbLabel(san: string, ply: number): string {
   const moveNum = Math.floor(ply / 2) + 1;
@@ -60,28 +68,6 @@ function outcomeClass(o: MoveGameListItem["outcome"]): string {
 
 function formatPlayerSide(name: string, rating: number | null): string {
   return rating != null ? `${name} (${rating})` : name;
-}
-
-function ResultBar({ move, maxGames, fullWidth }: { move: AggregatedMove; maxGames: number; fullWidth?: boolean }) {
-  const total = move.wins + move.draws + move.losses;
-  if (total === 0) return null;
-
-  const barWidthPct = fullWidth ? 100 : (maxGames > 0 ? (move.games / maxGames) * 100 : 100);
-  const mateWinPct = (move.mateWins / total) * 100;
-  const trapWinPct = (move.trapWins / total) * 100;
-  const plainWinPct = ((move.wins - move.trapWins - move.mateWins) / total) * 100;
-  const dPct = (move.draws / total) * 100;
-  const lPct = (move.losses / total) * 100;
-
-  return (
-    <div class="result-bar" style={{ width: `${barWidthPct}%` }}>
-      {mateWinPct > 0 && <div class="result-bar-mate-win" style={{ width: `${mateWinPct}%` }} />}
-      {plainWinPct > 0 && <div class="result-bar-win" style={{ width: `${plainWinPct}%` }} />}
-      {trapWinPct > 0 && <div class="result-bar-trap-win" style={{ width: `${trapWinPct}%` }} />}
-      {dPct > 0 && <div class="result-bar-draw" style={{ width: `${dPct}%` }} />}
-      {lPct > 0 && <div class="result-bar-loss" style={{ width: `${lPct}%` }} />}
-    </div>
-  );
 }
 
 type MoveEvalDiffEntry =
@@ -122,6 +108,8 @@ type OpeningTrackerProps = {
   gamesDataRevision: number;
   /** When set, only moves for these tracked users; `undefined` = no filter (all rows). */
   includeUsernames?: string[];
+  bookmarksRevision: number;
+  onBookmarkToggle: () => void;
 };
 
 export function OpeningTracker({
@@ -129,6 +117,8 @@ export function OpeningTracker({
   expandResultBars,
   gamesDataRevision,
   includeUsernames,
+  bookmarksRevision,
+  onBookmarkToggle,
 }: OpeningTrackerProps) {
   const loc = useExplorerLocation();
   const [posData, setPosData] = useState<PositionData | null>(null);
@@ -157,6 +147,39 @@ export function OpeningTracker({
   }, [previewSan, loc.via, replay.error]);
 
   const posHash = replay.posHash;
+
+  const viaKey = loc.via.join("\0");
+  const bookmarkFragment = useMemo(
+    () => buildFragment(replay.posHash, loc.via, colorFilter),
+    [replay.posHash, viaKey, colorFilter],
+  );
+
+  const [starred, setStarred] = useState(false);
+  const [bookmarkAddMode, setBookmarkAddMode] = useState(false);
+  const [bookmarkNameDraft, setBookmarkNameDraft] = useState("");
+  const bookmarkNameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listBookmarks().then((rows) => {
+      if (!cancelled) setStarred(rows.some((r) => r.fragment === bookmarkFragment));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookmarkFragment, bookmarksRevision]);
+
+  useEffect(() => {
+    setBookmarkAddMode(false);
+  }, [bookmarkFragment]);
+
+  useEffect(() => {
+    if (!bookmarkAddMode || starred) return;
+    const el = bookmarkNameInputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [bookmarkAddMode, starred]);
 
   useEffect(() => {
     setPreviewSan(null);
@@ -416,6 +439,37 @@ export function OpeningTracker({
     navigateTo(replay.posHash, loc.via, next, { replace: true });
   }
 
+  async function confirmBookmarkAdd() {
+    if (replay.error) return;
+    try {
+      await addBookmark(bookmarkFragment, bookmarkNameDraft);
+      setStarred(true);
+      setBookmarkAddMode(false);
+      onBookmarkToggle();
+    } catch {
+      /* ignore bookmark errors */
+    }
+  }
+
+  function handleBookmarkStarButton() {
+    if (replay.error) return;
+    if (starred) {
+      void (async () => {
+        try {
+          await removeBookmark(bookmarkFragment);
+          setStarred(false);
+          setBookmarkAddMode(false);
+          onBookmarkToggle();
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
+    setBookmarkNameDraft(defaultBookmarkNameFromVia(loc.via));
+    setBookmarkAddMode(true);
+  }
+
   const hasResults = moves.some((m) => m.wins + m.draws + m.losses > 0);
   const maxGames = moves.reduce((max, m) => Math.max(max, m.games), 0);
   const moveTableColSpan = 2 + (hasResults ? 2 : 0);
@@ -467,14 +521,60 @@ export function OpeningTracker({
             {replay.sideToMove === "w" ? "White" : "Black"} to move
           </span>
         </div>
-        <a
-          class="analyze-link"
-          href={chessComAnalysisUrl(replay.fen)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Analyze on chess.com ↗
-        </a>
+        <div class="explorer-header-right">
+          {bookmarkAddMode && !starred ? (
+            <>
+              <input
+                ref={bookmarkNameInputRef}
+                class="bookmark-add-name-input"
+                type="text"
+                value={bookmarkNameDraft}
+                placeholder="Bookmark name"
+                aria-label="Bookmark name"
+                onInput={(e) => setBookmarkNameDraft((e.currentTarget as HTMLInputElement).value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setBookmarkAddMode(false);
+                  }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void confirmBookmarkAdd();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                class="bookmark-confirm-btn"
+                aria-label="Save bookmark"
+                onClick={() => void confirmBookmarkAdd()}
+              >
+                ✓
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              class={`bookmark-star-btn ${starred ? "bookmark-star-btn--on" : ""}`}
+              disabled={!!replay.error}
+              aria-pressed={starred}
+              aria-label={
+                starred ? "Remove bookmark for this position" : "Add bookmark for this position"
+              }
+              onClick={handleBookmarkStarButton}
+            >
+              {starred ? "★" : "☆"}
+            </button>
+          )}
+          <a
+            class="analyze-link"
+            href={chessComAnalysisUrl(replay.fen)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Analyze on chess.com ↗
+          </a>
+        </div>
       </div>
 
       <div class="explorer-body">
@@ -562,7 +662,7 @@ export function OpeningTracker({
                         </td>
                         {hasResults && (
                           <td class="moves-result">
-                            <ResultBar move={m} maxGames={maxGames} fullWidth={expandResultBars} />
+                            <MoveResultBar move={m} maxGames={maxGames} fullWidth={expandResultBars} />
                           </td>
                         )}
                         {hasResults && (

@@ -35,7 +35,11 @@ type RequestMessage =
   | { type: "GET_ARCHIVES_LAST_MODIFIED_FOR_USER"; id: number; username: string }
   | { type: "TOUCH_PLAYER_SYNC"; id: number; username: string; syncedAt: number }
   | { type: "LIST_PLAYERS"; id: number }
-  | { type: "DELETE_PLAYER"; id: number; username: string };
+  | { type: "DELETE_PLAYER"; id: number; username: string }
+  | { type: "LIST_BOOKMARKS"; id: number }
+  | { type: "ADD_BOOKMARK"; id: number; fragment: string; name: string }
+  | { type: "REMOVE_BOOKMARK"; id: number; fragment: string }
+  | { type: "SET_BOOKMARK_NAME"; id: number; fragment: string; name: string };
 
 function reply(id: number, result: unknown, error?: string, transfer?: Transferable[]) {
   const msg = error ? { id, error } : { id, result };
@@ -105,6 +109,11 @@ CREATE TABLE IF NOT EXISTS player_sync_meta (
   username TEXT PRIMARY KEY,
   last_sync_at INTEGER
 );
+CREATE TABLE IF NOT EXISTS bookmarks (
+  fragment TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT ''
+);
 `;
 
 type Database = InstanceType<Sqlite3Static["oo1"]["DB"]>;
@@ -127,6 +136,24 @@ async function initDb() {
   db.exec(SCHEMA);
   migrateArchivesBlobColumn();
   migrateArchivesLastModifiedColumn();
+  migrateBookmarksNameColumn();
+}
+
+function migrateBookmarksNameColumn() {
+  let cols: { name: string }[];
+  try {
+    cols = db.exec("PRAGMA table_info(bookmarks)", {
+      rowMode: "object",
+      returnValue: "resultRows",
+    }) as unknown as { name: string }[];
+  } catch {
+    return;
+  }
+  if (!Array.isArray(cols) || cols.length === 0) return;
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has("name")) {
+    db.exec("ALTER TABLE bookmarks ADD COLUMN name TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 /** Older builds used `body`; keep one-file backups coherent by renaming to `gzip_json`. */
@@ -384,8 +411,53 @@ function deletePlayer(username: string) {
 
 function clearAll() {
   db.exec(
-    "DELETE FROM moves; DELETE FROM games; DELETE FROM archives; DELETE FROM player_sync_meta; DELETE FROM stockfish_eval; VACUUM;",
+    "DELETE FROM moves; DELETE FROM games; DELETE FROM archives; DELETE FROM player_sync_meta; DELETE FROM stockfish_eval; DELETE FROM bookmarks; VACUUM;",
   );
+}
+
+type BookmarkRow = { fragment: string; created_at: number; name: string };
+
+function listBookmarks(): BookmarkRow[] {
+  const raw = db.exec(
+    "SELECT fragment, created_at, name FROM bookmarks ORDER BY created_at DESC",
+    {
+      rowMode: "object",
+      returnValue: "resultRows",
+    },
+  ) as unknown as Record<string, unknown>[];
+  return raw.map((row) => ({
+    fragment: String(row.fragment),
+    created_at: Number(row.created_at) || 0,
+    name: row.name != null ? String(row.name) : "",
+  }));
+}
+
+function addBookmark(fragment: string, name: string) {
+  const f = fragment.trim();
+  if (!f || !f.startsWith("#")) return;
+  const n = name.trim();
+  const stmt = db.prepare(
+    `INSERT INTO bookmarks (fragment, created_at, name) VALUES (?, ?, ?)
+     ON CONFLICT(fragment) DO UPDATE SET created_at = excluded.created_at, name = excluded.name`,
+  );
+  try {
+    stmt.bind([f, Math.floor(Date.now() / 1000), n]).stepReset();
+  } finally {
+    stmt.finalize();
+  }
+}
+
+function setBookmarkName(fragment: string, name: string) {
+  const f = fragment.trim();
+  if (!f) return;
+  const n = name.trim();
+  db.exec("UPDATE bookmarks SET name = ? WHERE fragment = ?", { bind: [n, f] });
+}
+
+function removeBookmark(fragment: string) {
+  const f = fragment.trim();
+  if (!f) return;
+  db.exec("DELETE FROM bookmarks WHERE fragment = ?", { bind: [f] });
 }
 
 function exportDb(): Uint8Array {
@@ -451,6 +523,21 @@ initDb()
             break;
           case "DELETE_PLAYER":
             deletePlayer(msg.username);
+            reply(msg.id, null);
+            break;
+          case "LIST_BOOKMARKS":
+            reply(msg.id, listBookmarks());
+            break;
+          case "ADD_BOOKMARK":
+            addBookmark(msg.fragment, msg.name);
+            reply(msg.id, null);
+            break;
+          case "REMOVE_BOOKMARK":
+            removeBookmark(msg.fragment);
+            reply(msg.id, null);
+            break;
+          case "SET_BOOKMARK_NAME":
+            setBookmarkName(msg.fragment, msg.name);
             reply(msg.id, null);
             break;
         }

@@ -131,6 +131,29 @@ export function aggregateMoves(records: MoveRecord[], colorFilter: ColorFilter =
     .sort((a, b) => b.games - a.games);
 }
 
+/** Sum per-move aggregates; each game is counted once across moves from this position. */
+export function positionTotalsFromMoves(moves: AggregatedMove[]): AggregatedMove {
+  const acc = {
+    san: "",
+    games: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+    trapWins: 0,
+    mateWins: 0,
+    fenHashAfter: "",
+  };
+  for (const m of moves) {
+    acc.games += m.games;
+    acc.wins += m.wins;
+    acc.draws += m.draws;
+    acc.losses += m.losses;
+    acc.trapWins += m.trapWins;
+    acc.mateWins += m.mateWins;
+  }
+  return acc;
+}
+
 function extractEloFromPgn(pgn: string | null): { whiteElo: number | null; blackElo: number | null } {
   if (!pgn) return { whiteElo: null, blackElo: null };
   try {

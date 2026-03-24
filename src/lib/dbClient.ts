@@ -172,3 +172,21 @@ export async function getDbSize(): Promise<number> {
 export async function exportDb(): Promise<Uint8Array> {
   return await request<Uint8Array>({ type: "EXPORT_DB" });
 }
+
+export type BookmarkRow = { fragment: string; created_at: number; name: string };
+
+export async function listBookmarks(): Promise<BookmarkRow[]> {
+  return (await request<BookmarkRow[]>({ type: "LIST_BOOKMARKS" })) ?? [];
+}
+
+export async function addBookmark(fragment: string, name: string): Promise<void> {
+  await request({ type: "ADD_BOOKMARK", fragment, name });
+}
+
+export async function setBookmarkName(fragment: string, name: string): Promise<void> {
+  await request({ type: "SET_BOOKMARK_NAME", fragment, name });
+}
+
+export async function removeBookmark(fragment: string): Promise<void> {
+  await request({ type: "REMOVE_BOOKMARK", fragment });
+}
