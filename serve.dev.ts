@@ -1,4 +1,4 @@
-const PORT = 3200;
+const PORT = Number(process.env.OT_DEV_PORT) || 3200;
 
 const server = Bun.serve({
   port: PORT,

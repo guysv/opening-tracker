@@ -207,16 +207,21 @@ export function BookmarkSidebar({
                       }}
                     />
                   ) : (
-                    <button
-                      type="button"
-                      class="bookmark-card-label"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        beginRename(c);
-                      }}
-                    >
-                      {c.displayTitle}
-                    </button>
+                    <div class="bookmark-card-title-row">
+                      <span class="bookmark-card-label">{c.displayTitle}</span>
+                      <button
+                        type="button"
+                        class="bookmark-card-rename"
+                        aria-label={`Rename bookmark: ${c.displayTitle}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          beginRename(c);
+                        }}
+                      >
+                        ✎
+                      </button>
+                    </div>
                   )}
                   <button
                     type="button"

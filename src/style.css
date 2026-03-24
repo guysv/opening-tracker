@@ -102,11 +102,20 @@ body {
   align-items: stretch;
 }
 
+.bookmark-card-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.65rem;
+  min-width: 0;
+}
+
 .bookmark-card-label {
   word-break: break-word;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   margin: 0;
-  padding: 0.5rem 0.65rem 0.35rem;
+  padding: 0.15rem 0 0;
   border: none;
   background: transparent;
   color: inherit;
@@ -115,15 +124,31 @@ body {
   font-weight: 600;
   line-height: 1.25;
   text-align: left;
-  cursor: pointer;
   border-radius: 0;
 }
 
-.bookmark-card-label:hover {
-  background: rgba(255, 255, 255, 0.06);
+.bookmark-card-rename {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
-.bookmark-card-label:focus-visible {
+.bookmark-card-rename:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bookmark-card-rename:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
 }

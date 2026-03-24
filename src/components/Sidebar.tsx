@@ -118,73 +118,6 @@ export function Sidebar({
 
   return (
     <aside class="sidebar">
-      <div
-        class={addPlayerOpen ? "add-player-card add-player-card--open" : "add-player-card"}
-      >
-        {!addPlayerOpen ? (
-          <button
-            type="button"
-            class="add-player-card-trigger"
-            aria-label="Add player"
-            onClick={() => setAddPlayerOpen(true)}
-          >
-            <span class="add-player-card-plus" aria-hidden>
-              +
-            </span>
-          </button>
-        ) : (
-          <form
-            class="import-form import-form--add import-form--in-card"
-            onSubmit={handleAddSubmit}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.preventDefault();
-                closeAddPlayerForm();
-              }
-            }}
-          >
-            <div class="add-player-form-title">Add player</div>
-            <div class="add-player-form-row">
-              <input
-                ref={addUsernameRef}
-                name="username"
-                type="text"
-                placeholder="chess.com username"
-                aria-label="chess.com username"
-                required
-                value={addUsername}
-                onInput={(e) => setAddUsername((e.currentTarget as HTMLInputElement).value)}
-              />
-            </div>
-            <div class="add-player-form-row add-player-form-row--controls">
-              <div
-                class="add-player-months-group"
-                title="How many past calendar months of games to fetch (1–120)."
-              >
-                <label class="add-player-months-label" for="add-player-months">
-                  Months back
-                </label>
-                <input
-                  id="add-player-months"
-                  name="monthsBack"
-                  type="number"
-                  min={1}
-                  max={120}
-                  aria-label="Months back — how many past months of games to import"
-                  required
-                  value={addMonthsBack}
-                  onInput={(e) => setAddMonthsBack((e.currentTarget as HTMLInputElement).value)}
-                />
-              </div>
-              <button type="submit">Import</button>
-              <button type="button" class="add-player-cancel" onClick={closeAddPlayerForm}>
-                Cancel
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-
       <div class="player-cards-scroll">
         {players.map((p) => {
           const disabled = Boolean(disabledUsernames[p.username]);
@@ -293,6 +226,73 @@ export function Sidebar({
             </div>
           );
         })}
+
+        <div
+          class={addPlayerOpen ? "add-player-card add-player-card--open" : "add-player-card"}
+        >
+          {!addPlayerOpen ? (
+            <button
+              type="button"
+              class="add-player-card-trigger"
+              aria-label="Add player"
+              onClick={() => setAddPlayerOpen(true)}
+            >
+              <span class="add-player-card-plus" aria-hidden>
+                +
+              </span>
+            </button>
+          ) : (
+            <form
+              class="import-form import-form--add import-form--in-card"
+              onSubmit={handleAddSubmit}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  closeAddPlayerForm();
+                }
+              }}
+            >
+              <div class="add-player-form-title">Add player</div>
+              <div class="add-player-form-row">
+                <input
+                  ref={addUsernameRef}
+                  name="username"
+                  type="text"
+                  placeholder="chess.com username"
+                  aria-label="chess.com username"
+                  required
+                  value={addUsername}
+                  onInput={(e) => setAddUsername((e.currentTarget as HTMLInputElement).value)}
+                />
+              </div>
+              <div class="add-player-form-row add-player-form-row--controls">
+                <div
+                  class="add-player-months-group"
+                  title="How many past calendar months of games to fetch (1–120)."
+                >
+                  <label class="add-player-months-label" for="add-player-months">
+                    Months back
+                  </label>
+                  <input
+                    id="add-player-months"
+                    name="monthsBack"
+                    type="number"
+                    min={1}
+                    max={120}
+                    aria-label="Months back — how many past months of games to import"
+                    required
+                    value={addMonthsBack}
+                    onInput={(e) => setAddMonthsBack((e.currentTarget as HTMLInputElement).value)}
+                  />
+                </div>
+                <button type="submit">Import</button>
+                <button type="button" class="add-player-cancel" onClick={closeAddPlayerForm}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
 
       <button type="button" class="sidebar-clear-db" onClick={onClear}>
