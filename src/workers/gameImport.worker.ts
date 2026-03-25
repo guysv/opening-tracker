@@ -67,7 +67,15 @@ type ArchiveBatchItem = {
   username: string;
   path: string;
   fetchedAt: number;
+  checkedAt: number;
   gzipJson: Uint8Array;
+  lastModified: string | null;
+};
+
+type ArchiveCheckedItem = {
+  username: string;
+  path: string;
+  checkedAt: number;
   lastModified: string | null;
 };
 
@@ -199,9 +207,10 @@ async function downloadArchives(
   normalizedUsername: string,
   paths: string[],
   archiveLastModifiedByPath: Record<string, string | null> | undefined,
-): Promise<{ games: ChessArchiveGame[]; archives: ArchiveBatchItem[] }> {
+): Promise<{ games: ChessArchiveGame[]; archives: ArchiveBatchItem[]; checks: ArchiveCheckedItem[] }> {
   const allGames: ChessArchiveGame[] = [];
   const archives: ArchiveBatchItem[] = [];
+  const checks: ArchiveCheckedItem[] = [];
   const dec = new TextDecoder();
   const cache = archiveLastModifiedByPath ?? {};
 
@@ -222,6 +231,7 @@ async function downloadArchives(
       username: normalizedUsername,
       path: archivePath,
       fetchedAt,
+      checkedAt: fetchedAt,
       gzipJson: gzipOwned,
       lastModified,
     });
@@ -263,8 +273,10 @@ async function downloadArchives(
     }
 
     let needGet = true;
+    const checkedAt = Date.now();
+    let headLm: string | null = null;
     if (head.ok) {
-      const headLm = responseLastModified(head.headers);
+      headLm = responseLastModified(head.headers);
       const cachedLm = cache[archivePath];
       if (headLm != null && cachedLm === headLm) {
         needGet = false;
@@ -272,6 +284,12 @@ async function downloadArchives(
     }
 
     if (!needGet) {
+      checks.push({
+        username: normalizedUsername,
+        path: archivePath,
+        checkedAt,
+        lastModified: headLm,
+      });
       postProgress({ phase: "download", current: i + 1, total: paths.length });
       continue;
     }
@@ -281,7 +299,7 @@ async function downloadArchives(
     postProgress({ phase: "download", current: i + 1, total: paths.length });
   }
 
-  return { games: allGames, archives };
+  return { games: allGames, archives, checks };
 }
 
 async function buildEntriesFromGames(
@@ -318,10 +336,11 @@ function postImportResult(
   op: "initial" | "sync" | "extend",
   entries: { record: GameRecord; moves: MoveRecord[] }[],
   archives: ArchiveBatchItem[],
+  checks: ArchiveCheckedItem[],
 ): void {
   self.postMessage({
     type: "IMPORT_ENTRIES",
-    payload: { username: normalizedUsername, entries, op, archives },
+    payload: { username: normalizedUsername, entries, op, archives, checks },
   });
 }
 
@@ -358,18 +377,18 @@ async function runImport(
   }
 
   if (paths.length === 0) {
-    postImportResult(normalizedUsername, op, [], []);
+    postImportResult(normalizedUsername, op, [], [], []);
     return;
   }
 
   const archiveLastModifiedByPath = message.payload.archiveLastModifiedByPath;
-  const { games, archives } = await downloadArchives(
+  const { games, archives, checks } = await downloadArchives(
     normalizedUsername,
     paths,
     archiveLastModifiedByPath,
   );
   const entries = await buildEntriesFromGames(games, normalizedUsername);
-  postImportResult(normalizedUsername, op, entries, archives);
+  postImportResult(normalizedUsername, op, entries, archives, checks);
 }
 
 self.onmessage = async (event: MessageEvent<ImportRequestMessage>) => {

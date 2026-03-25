@@ -7,10 +7,11 @@ import {
   getArchivesLastModifiedForUser,
   initDb,
   listPlayers,
-  touchPlayerSync,
+  touchArchivesChecked,
   upsertArchives,
   upsertGamesWithMoves,
   type ArchiveUpsertRow,
+  type ArchiveCheckedRow,
   type PlayerListRow,
 } from "../lib/dbClient";
 import type { GameRecord, MoveRecord } from "../lib/gamesDb";
@@ -30,6 +31,7 @@ type WorkerResponse =
         entries: { record: GameRecord; moves: MoveRecord[] }[];
         op: "initial" | "sync" | "extend";
         archives: ArchiveUpsertRow[];
+        checks: ArchiveCheckedRow[];
       };
     }
   | { type: "IMPORT_ERROR"; payload: { message: string } }
@@ -105,7 +107,7 @@ export function App() {
       const message = event.data;
 
       if (message.type === "IMPORT_ENTRIES") {
-        const { username, entries, op, archives } = message.payload;
+        const { username, entries, op, archives, checks } = message.payload;
         setImportActivity((prev) =>
           prev
             ? { ...prev, saving: true, savingStartedAt: prev.savingStartedAt ?? Date.now() }
@@ -117,11 +119,11 @@ export function App() {
             if (archives.length > 0) {
               await upsertArchives(archives);
             }
+            if (checks.length > 0) {
+              await touchArchivesChecked(checks);
+            }
             if (entries.length > 0) {
               await upsertGamesWithMoves(entries);
-            }
-            if (op === "sync") {
-              await touchPlayerSync(username, Date.now());
             }
             setImportActivity(null);
             importBusyRef.current = false;

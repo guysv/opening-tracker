@@ -7,8 +7,16 @@ type ArchiveUpsertRow = {
   username: string;
   path: string;
   fetchedAt: number;
+  checkedAt: number;
   gzipJson: Uint8Array;
   /** HTTP `Last-Modified` from the archive response (metadata; browser cannot send `If-Modified-Since` to chess.com). */
+  lastModified: string | null;
+};
+
+type ArchiveCheckedRow = {
+  username: string;
+  path: string;
+  checkedAt: number;
   lastModified: string | null;
 };
 
@@ -33,7 +41,7 @@ type RequestMessage =
   | { type: "EXPORT_DB"; id: number }
   | { type: "UPSERT_ARCHIVES"; id: number; rows: ArchiveUpsertRow[] }
   | { type: "GET_ARCHIVES_LAST_MODIFIED_FOR_USER"; id: number; username: string }
-  | { type: "TOUCH_PLAYER_SYNC"; id: number; username: string; syncedAt: number }
+  | { type: "TOUCH_ARCHIVES_CHECKED"; id: number; rows: ArchiveCheckedRow[] }
   | { type: "LIST_PLAYERS"; id: number }
   | { type: "DELETE_PLAYER"; id: number; username: string }
   | { type: "LIST_BOOKMARKS"; id: number }
@@ -100,15 +108,12 @@ CREATE TABLE IF NOT EXISTS archives (
   username TEXT NOT NULL,
   path TEXT NOT NULL,
   fetched_at INTEGER NOT NULL,
+  checked_at INTEGER,
   gzip_json BLOB NOT NULL,
   last_modified TEXT,
   PRIMARY KEY (username, path)
 );
 CREATE INDEX IF NOT EXISTS idx_archives_username ON archives(username);
-CREATE TABLE IF NOT EXISTS player_sync_meta (
-  username TEXT PRIMARY KEY,
-  last_sync_at INTEGER
-);
 CREATE TABLE IF NOT EXISTS bookmarks (
   fragment TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL,
@@ -142,6 +147,7 @@ function openDb() {
   db.exec(SCHEMA);
   migrateArchivesBlobColumn();
   migrateArchivesLastModifiedColumn();
+  migrateArchivesCheckedAtColumn();
   migrateBookmarksNameColumn();
 }
 
@@ -220,6 +226,24 @@ function migrateArchivesLastModifiedColumn() {
     return;
   }
   db.exec("ALTER TABLE archives ADD COLUMN last_modified TEXT");
+}
+
+function migrateArchivesCheckedAtColumn() {
+  let cols: { name: string }[];
+  try {
+    cols = db.exec("PRAGMA table_info(archives)", {
+      rowMode: "object",
+      returnValue: "resultRows",
+    }) as unknown as { name: string }[];
+  } catch {
+    return;
+  }
+  if (!Array.isArray(cols) || cols.length === 0) return;
+  const names = new Set(cols.map((c) => c.name));
+  if (names.has("checked_at")) return;
+  db.exec("ALTER TABLE archives ADD COLUMN checked_at INTEGER");
+  // Backfill: older rows only have fetched_at (GET time). Use it as initial checked_at.
+  db.exec("UPDATE archives SET checked_at = fetched_at WHERE checked_at IS NULL");
 }
 
 function upsertGamesWithMoves(entries: { record: GameRecord; moves: MoveRecord[] }[]) {
@@ -332,7 +356,7 @@ function upsertStockfishEval(row: StockfishEvalRecord) {
 function upsertArchives(rows: ArchiveUpsertRow[]) {
   if (rows.length === 0) return;
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO archives (username, path, fetched_at, gzip_json, last_modified) VALUES (?,?,?,?,?)`,
+    `INSERT OR REPLACE INTO archives (username, path, fetched_at, checked_at, gzip_json, last_modified) VALUES (?,?,?,?,?,?)`,
   );
   try {
     for (const r of rows) {
@@ -340,8 +364,9 @@ function upsertArchives(rows: ArchiveUpsertRow[]) {
         .bind(1, r.username)
         .bind(2, r.path)
         .bind(3, r.fetchedAt)
-        .bindAsBlob(4, r.gzipJson)
-        .bind(5, r.lastModified ?? null)
+        .bind(4, r.checkedAt)
+        .bindAsBlob(5, r.gzipJson)
+        .bind(6, r.lastModified ?? null)
         .stepReset();
     }
   } finally {
@@ -369,14 +394,25 @@ function getArchivesLastModifiedForUser(username: string): Record<string, string
   return out;
 }
 
-function touchPlayerSync(username: string, syncedAt: number) {
-  const u = username.trim().toLowerCase();
-  if (!u || !Number.isFinite(syncedAt)) return;
+function touchArchivesChecked(rows: ArchiveCheckedRow[]) {
+  if (rows.length === 0) return;
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO player_sync_meta (username, last_sync_at) VALUES (?, ?)`,
+    `UPDATE archives
+     SET checked_at = ?,
+         last_modified = COALESCE(?, last_modified)
+     WHERE username = ? AND path = ?`,
   );
   try {
-    stmt.bind(1, u).bind(2, Math.floor(syncedAt)).stepReset();
+    for (const r of rows) {
+      const u = r.username.trim().toLowerCase();
+      if (!u || !r.path || !Number.isFinite(r.checkedAt)) continue;
+      stmt
+        .bind(1, Math.floor(r.checkedAt))
+        .bind(2, r.lastModified ?? null)
+        .bind(3, u)
+        .bind(4, r.path)
+        .stepReset();
+    }
   } finally {
     stmt.finalize();
   }
@@ -388,18 +424,13 @@ function listPlayers(): PlayerListRow[] {
       SELECT DISTINCT username FROM games
       UNION
       SELECT DISTINCT username FROM archives
-      UNION
-      SELECT DISTINCT username FROM player_sync_meta
     )
     SELECT
       u.username AS username,
       (SELECT COUNT(*) FROM games g WHERE g.username = u.username) AS gameCount,
       (SELECT MIN(a.path) FROM archives a WHERE a.username = u.username) AS minArchivePath,
       (SELECT MAX(a.path) FROM archives a WHERE a.username = u.username) AS maxArchivePath,
-      COALESCE(
-        (SELECT psm.last_sync_at FROM player_sync_meta psm WHERE psm.username = u.username),
-        (SELECT MAX(a.fetched_at) FROM archives a WHERE a.username = u.username)
-      ) AS lastSyncAt,
+      (SELECT MAX(COALESCE(a.checked_at, a.fetched_at)) FROM archives a WHERE a.username = u.username) AS lastSyncAt,
       (SELECT strftime('%Y/%m', datetime(MIN(g.endTime), 'unixepoch')) FROM games g
         WHERE g.username = u.username AND g.endTime IS NOT NULL) AS minGameEndMonth
     FROM users u
@@ -429,7 +460,6 @@ function deletePlayer(username: string) {
     });
     db.exec("DELETE FROM games WHERE username = ?", { bind: [u] });
     db.exec("DELETE FROM archives WHERE username = ?", { bind: [u] });
-    db.exec("DELETE FROM player_sync_meta WHERE username = ?", { bind: [u] });
     db.exec("COMMIT");
   } catch (e) {
     db.exec("ROLLBACK");
@@ -536,8 +566,8 @@ initDb()
           case "GET_ARCHIVES_LAST_MODIFIED_FOR_USER":
             reply(msg.id, getArchivesLastModifiedForUser(msg.username));
             break;
-          case "TOUCH_PLAYER_SYNC":
-            touchPlayerSync(msg.username, msg.syncedAt);
+          case "TOUCH_ARCHIVES_CHECKED":
+            touchArchivesChecked(msg.rows);
             reply(msg.id, null);
             break;
           case "LIST_PLAYERS":

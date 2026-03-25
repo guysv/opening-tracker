@@ -15,7 +15,15 @@ export type ArchiveUpsertRow = {
   username: string;
   path: string;
   fetchedAt: number;
+  checkedAt: number;
   gzipJson: Uint8Array;
+  lastModified: string | null;
+};
+
+export type ArchiveCheckedRow = {
+  username: string;
+  path: string;
+  checkedAt: number;
   lastModified: string | null;
 };
 
@@ -137,6 +145,11 @@ export async function upsertArchives(rows: ArchiveUpsertRow[]): Promise<void> {
   await request({ type: "UPSERT_ARCHIVES", rows });
 }
 
+export async function touchArchivesChecked(rows: ArchiveCheckedRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  await request({ type: "TOUCH_ARCHIVES_CHECKED", rows });
+}
+
 /** Per-archive stored `Last-Modified` (from prior GETs). Keys are `YYYY/MM` paths. */
 export async function getArchivesLastModifiedForUser(
   username: string,
@@ -149,12 +162,6 @@ export async function getArchivesLastModifiedForUser(
       username: u,
     })) ?? {}
   );
-}
-
-export async function touchPlayerSync(username: string, syncedAt: number): Promise<void> {
-  const u = username.trim().toLowerCase();
-  if (!u || !Number.isFinite(syncedAt)) return;
-  await request({ type: "TOUCH_PLAYER_SYNC", username: u, syncedAt: Math.floor(syncedAt) });
 }
 
 export async function listPlayers(): Promise<PlayerListRow[]> {
