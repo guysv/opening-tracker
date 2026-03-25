@@ -120,23 +120,51 @@ type Database = InstanceType<Sqlite3Static["oo1"]["DB"]>;
 
 let sqlite3: Sqlite3Static;
 let db: Database;
+let poolUtil: Awaited<ReturnType<Sqlite3Static["installOpfsSAHPoolVfs"]>> | null = null;
 
-async function initDb() {
+const DB_PATH = "/opening-tracker.db";
+
+async function ensureSqliteReady() {
+  if (sqlite3 && poolUtil) return;
   const moduleUrl = new URL("/sqlite3/index.mjs", self.location.href).href;
   const { default: sqlite3InitModule } = await import(moduleUrl);
   sqlite3 = await sqlite3InitModule();
-
-  const poolUtil = await sqlite3.installOpfsSAHPoolVfs({
+  poolUtil = await sqlite3.installOpfsSAHPoolVfs({
     initialCapacity: 6,
     clearOnInit: false,
     name: "opfs-sahpool",
   });
+}
 
-  db = new poolUtil.OpfsSAHPoolDb("/opening-tracker.db");
+function openDb() {
+  if (!poolUtil) throw new Error("SQLite OPFS pool not initialized");
+  db = new poolUtil.OpfsSAHPoolDb(DB_PATH);
   db.exec(SCHEMA);
   migrateArchivesBlobColumn();
   migrateArchivesLastModifiedColumn();
   migrateBookmarksNameColumn();
+}
+
+async function initDb() {
+  await ensureSqliteReady();
+  openDb();
+}
+
+function closeDb() {
+  try {
+    db.close();
+  } catch {
+    /* best effort close before reset */
+  }
+}
+
+async function resetDb() {
+  if (!poolUtil) throw new Error("SQLite OPFS pool not initialized");
+  closeDb();
+  // SAH pool VFS tracks virtual files internally. Use its unlink API instead
+  // of deleting OPFS root entries directly.
+  poolUtil.unlink(DB_PATH);
+  openDb();
 }
 
 function migrateBookmarksNameColumn() {
@@ -409,12 +437,6 @@ function deletePlayer(username: string) {
   }
 }
 
-function clearAll() {
-  db.exec(
-    "DELETE FROM moves; DELETE FROM games; DELETE FROM archives; DELETE FROM player_sync_meta; DELETE FROM stockfish_eval; DELETE FROM bookmarks; VACUUM;",
-  );
-}
-
 type BookmarkRow = { fragment: string; created_at: number; name: string };
 
 function listBookmarks(): BookmarkRow[] {
@@ -474,7 +496,7 @@ initDb()
   .then(() => {
     self.postMessage({ type: "READY" });
 
-    self.onmessage = (event: MessageEvent<RequestMessage>) => {
+    self.onmessage = async (event: MessageEvent<RequestMessage>) => {
       const msg = event.data;
       try {
         switch (msg.type) {
@@ -496,7 +518,7 @@ initDb()
             reply(msg.id, null);
             break;
           case "CLEAR":
-            clearAll();
+            await resetDb();
             reply(msg.id, null);
             break;
           case "GET_DB_SIZE":
