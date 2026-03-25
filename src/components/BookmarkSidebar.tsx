@@ -166,6 +166,12 @@ export function BookmarkSidebar({
     });
   }
 
+  function openBookmark(c: CardModel) {
+    if (renamingFragment === c.row.fragment) return;
+    const p = parseFragment(c.row.fragment);
+    navigateTo(p.posHash, p.via, p.color);
+  }
+
   return (
     <aside class="bookmark-sidebar" aria-label="Bookmarked positions">
       <h2 class="bookmark-sidebar-title">Bookmarks</h2>
@@ -207,7 +213,19 @@ export function BookmarkSidebar({
                       }}
                     />
                   ) : (
-                    <div class="bookmark-card-title-row">
+                    <div
+                      class="bookmark-card-title-row"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open bookmark: ${c.displayTitle}`}
+                      onClick={() => openBookmark(c)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openBookmark(c);
+                        }
+                      }}
+                    >
                       <span class="bookmark-card-label">{c.displayTitle}</span>
                       <button
                         type="button"
@@ -226,11 +244,7 @@ export function BookmarkSidebar({
                   <button
                     type="button"
                     class="bookmark-card-nav"
-                    onClick={() => {
-                      if (renamingFragment === c.row.fragment) return;
-                      const p = parseFragment(c.row.fragment);
-                      navigateTo(p.posHash, p.via, p.color);
-                    }}
+                    onClick={() => openBookmark(c)}
                   >
                     <span class="bookmark-card-meta">{c.colorLabel}</span>
                     {!c.parseOk ? (
