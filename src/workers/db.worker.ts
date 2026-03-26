@@ -33,7 +33,7 @@ type PlayerListRow = {
 type RequestMessage =
   | { type: "UPSERT_GAMES_WITH_MOVES"; id: number; entries: { record: GameRecord; moves: MoveRecord[] }[] }
   | { type: "GET_MOVES_FOR_POSITION"; id: number; fenHash: string; includeUsernames?: string[] }
-  | { type: "GET_GAMES_BY_UUIDS"; id: number; uuids: string[] }
+  | { type: "GET_GAMES_BY_UUIDS"; id: number; uuids: number[] }
   | { type: "GET_STOCKFISH_EVAL"; id: number; fenHash: string }
   | { type: "UPSERT_STOCKFISH_EVAL"; id: number; row: StockfishEvalRecord }
   | { type: "CLEAR"; id: number }
@@ -60,40 +60,34 @@ function reply(id: number, result: unknown, error?: string, transfer?: Transfera
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS games (
-  uuid TEXT PRIMARY KEY,
+  gameKey INTEGER PRIMARY KEY,
+  source TEXT NOT NULL,
+  externalId TEXT NOT NULL,
   url TEXT NOT NULL,
-  username TEXT NOT NULL,
   whiteUsername TEXT NOT NULL DEFAULT '',
   blackUsername TEXT NOT NULL DEFAULT '',
   whiteRating INTEGER,
   blackRating INTEGER,
   endTime INTEGER,
-  timeClass TEXT,
-  rated INTEGER,
-  eco TEXT,
-  fen TEXT,
   initialSetup TEXT,
-  rules TEXT,
-  timeControl TEXT,
-  site TEXT,
-  event TEXT,
   pgn TEXT,
   result TEXT,
-  importedAt INTEGER NOT NULL
+  whiteWinKind TEXT,
+  blackWinKind TEXT,
+  importedAt INTEGER NOT NULL,
+  UNIQUE (source, externalId)
 );
 CREATE TABLE IF NOT EXISTS moves (
-  id TEXT PRIMARY KEY,
-  gameId TEXT NOT NULL,
-  fenHashBefore TEXT NOT NULL,
+  gameId INTEGER NOT NULL,
+  ply INTEGER NOT NULL,
+  fenHashBefore BLOB NOT NULL,
   san TEXT NOT NULL,
-  fenHashAfter TEXT NOT NULL,
-  result TEXT,
-  userColor TEXT,
-  winKind TEXT
+  fenHashAfter BLOB NOT NULL,
+  PRIMARY KEY (gameId, ply)
 );
-CREATE INDEX IF NOT EXISTS idx_games_username ON games(username);
+CREATE INDEX IF NOT EXISTS idx_games_whiteUsername ON games(whiteUsername);
+CREATE INDEX IF NOT EXISTS idx_games_blackUsername ON games(blackUsername);
 CREATE INDEX IF NOT EXISTS idx_games_endTime ON games(endTime);
-CREATE INDEX IF NOT EXISTS idx_moves_fenHashBefore ON moves(fenHashBefore);
 CREATE INDEX IF NOT EXISTS idx_moves_fenHashBefore_san ON moves(fenHashBefore, san);
 CREATE INDEX IF NOT EXISTS idx_moves_gameId ON moves(gameId);
 CREATE TABLE IF NOT EXISTS stockfish_eval (
@@ -128,6 +122,7 @@ let db: Database;
 let poolUtil: Awaited<ReturnType<Sqlite3Static["installOpfsSAHPoolVfs"]>> | null = null;
 
 const DB_PATH = "/opening-tracker.db";
+const RESET_ON_INIT = new URL(self.location.href).searchParams.get("resetOnInit") === "1";
 
 async function ensureSqliteReady() {
   if (sqlite3 && poolUtil) return;
@@ -144,15 +139,54 @@ async function ensureSqliteReady() {
 function openDb() {
   if (!poolUtil) throw new Error("SQLite OPFS pool not initialized");
   db = new poolUtil.OpfsSAHPoolDb(DB_PATH);
+  try {
+    db.exec(SCHEMA);
+  } catch (e) {
+    // If a stale on-disk schema exists (e.g. old `moves.san` vs new `moves.sanId`),
+    // hard-rebuild so startup never gets stuck on legacy shape.
+    rebuildSchema();
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn("Schema apply failed; rebuilt schema from scratch:", message);
+  }
+}
+
+function openDbWithoutSchema() {
+  if (!poolUtil) throw new Error("SQLite OPFS pool not initialized");
+  db = new poolUtil.OpfsSAHPoolDb(DB_PATH);
+}
+
+function rebuildSchema() {
+  db.exec(`
+DROP INDEX IF EXISTS idx_moves_fenHashBefore;
+DROP INDEX IF EXISTS idx_moves_fenHashBefore_san;
+DROP INDEX IF EXISTS idx_moves_gameId;
+DROP INDEX IF EXISTS idx_games_username;
+DROP INDEX IF EXISTS idx_games_whiteUsername;
+DROP INDEX IF EXISTS idx_games_blackUsername;
+DROP INDEX IF EXISTS idx_games_endTime;
+DROP INDEX IF EXISTS idx_archives_username;
+DROP TABLE IF EXISTS moves;
+DROP TABLE IF EXISTS games;
+DROP TABLE IF EXISTS stockfish_eval;
+DROP TABLE IF EXISTS archives;
+DROP TABLE IF EXISTS bookmarks;
+`);
   db.exec(SCHEMA);
-  migrateArchivesBlobColumn();
-  migrateArchivesLastModifiedColumn();
-  migrateArchivesCheckedAtColumn();
-  migrateBookmarksNameColumn();
 }
 
 async function initDb() {
   await ensureSqliteReady();
+  if (RESET_ON_INIT) {
+    if (!poolUtil) throw new Error("SQLite OPFS pool not initialized");
+    try {
+      poolUtil.unlink(DB_PATH);
+    } catch {
+      /* ignore; rebuildSchema() below guarantees fresh shape */
+    }
+    openDbWithoutSchema();
+    rebuildSchema();
+    return;
+  }
   openDb();
 }
 
@@ -169,119 +203,66 @@ async function resetDb() {
   closeDb();
   // SAH pool VFS tracks virtual files internally. Use its unlink API instead
   // of deleting OPFS root entries directly.
-  poolUtil.unlink(DB_PATH);
-  openDb();
-}
-
-function migrateBookmarksNameColumn() {
-  let cols: { name: string }[];
   try {
-    cols = db.exec("PRAGMA table_info(bookmarks)", {
-      rowMode: "object",
-      returnValue: "resultRows",
-    }) as unknown as { name: string }[];
+    poolUtil.unlink(DB_PATH);
   } catch {
-    return;
+    /* fallback below will hard-rebuild schema in-place */
   }
-  if (!Array.isArray(cols) || cols.length === 0) return;
-  const names = new Set(cols.map((c) => c.name));
-  if (!names.has("name")) {
-    db.exec("ALTER TABLE bookmarks ADD COLUMN name TEXT NOT NULL DEFAULT ''");
-  }
-}
-
-/** Older builds used `body`; keep one-file backups coherent by renaming to `gzip_json`. */
-function migrateArchivesBlobColumn() {
-  let cols: { name: string }[];
-  try {
-    cols = db.exec("PRAGMA table_info(archives)", {
-      rowMode: "object",
-      returnValue: "resultRows",
-    }) as unknown as { name: string }[];
-  } catch {
-    return;
-  }
-  if (!Array.isArray(cols) || cols.length === 0) return;
-  const names = new Set(cols.map((c) => c.name));
-  if (names.has("body") && !names.has("gzip_json")) {
-    db.exec("ALTER TABLE archives RENAME COLUMN body TO gzip_json");
-  }
-}
-
-function migrateArchivesLastModifiedColumn() {
-  let cols: { name: string }[];
-  try {
-    cols = db.exec("PRAGMA table_info(archives)", {
-      rowMode: "object",
-      returnValue: "resultRows",
-    }) as unknown as { name: string }[];
-  } catch {
-    return;
-  }
-  if (!Array.isArray(cols) || cols.length === 0) return;
-  const names = new Set(cols.map((c) => c.name));
-  if (names.has("last_modified")) return;
-  if (names.has("etag")) {
-    db.exec("ALTER TABLE archives RENAME COLUMN etag TO last_modified");
-    return;
-  }
-  db.exec("ALTER TABLE archives ADD COLUMN last_modified TEXT");
-}
-
-function migrateArchivesCheckedAtColumn() {
-  let cols: { name: string }[];
-  try {
-    cols = db.exec("PRAGMA table_info(archives)", {
-      rowMode: "object",
-      returnValue: "resultRows",
-    }) as unknown as { name: string }[];
-  } catch {
-    return;
-  }
-  if (!Array.isArray(cols) || cols.length === 0) return;
-  const names = new Set(cols.map((c) => c.name));
-  if (names.has("checked_at")) return;
-  db.exec("ALTER TABLE archives ADD COLUMN checked_at INTEGER");
-  // Backfill: older rows only have fetched_at (GET time). Use it as initial checked_at.
-  db.exec("UPDATE archives SET checked_at = fetched_at WHERE checked_at IS NULL");
+  openDbWithoutSchema();
+  rebuildSchema();
 }
 
 function upsertGamesWithMoves(entries: { record: GameRecord; moves: MoveRecord[] }[]) {
   db.exec("BEGIN");
   try {
     const delMoves = db.prepare("DELETE FROM moves WHERE gameId = ?");
-    const insGame = db.prepare(
-      `INSERT OR REPLACE INTO games (uuid, url, username, whiteUsername, blackUsername,
-        whiteRating, blackRating, endTime, timeClass, rated, eco, fen, initialSetup,
-        rules, timeControl, site, event, pgn, result, importedAt)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    );
+    const upsertGameSql = `
+      INSERT INTO games (source, externalId, url, whiteUsername, blackUsername,
+        whiteRating, blackRating, endTime, initialSetup, pgn, result, whiteWinKind, blackWinKind, importedAt)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(source, externalId) DO UPDATE SET
+        url=excluded.url,
+        whiteUsername=excluded.whiteUsername,
+        blackUsername=excluded.blackUsername,
+        whiteRating=excluded.whiteRating,
+        blackRating=excluded.blackRating,
+        endTime=excluded.endTime,
+        initialSetup=excluded.initialSetup,
+        pgn=excluded.pgn,
+        result=excluded.result,
+        whiteWinKind=excluded.whiteWinKind,
+        blackWinKind=excluded.blackWinKind,
+        importedAt=excluded.importedAt
+      RETURNING gameKey
+    `;
     const insMove = db.prepare(
-      `INSERT OR REPLACE INTO moves (id, gameId, fenHashBefore, san, fenHashAfter, result, userColor, winKind)
-       VALUES (?,?,?,?,?,?,?,?)`,
+      `INSERT OR REPLACE INTO moves (gameId, ply, fenHashBefore, san, fenHashAfter)
+       VALUES (?,?,?,?,?)`,
     );
 
     try {
       for (const { record: g, moves } of entries) {
-        delMoves.bind([g.uuid]).stepReset();
-        insGame
-          .bind([
-            g.uuid, g.url, g.username, g.whiteUsername, g.blackUsername,
-            g.whiteRating, g.blackRating, g.endTime, g.timeClass,
-            g.rated === null ? null : g.rated ? 1 : 0,
-            g.eco, g.fen, g.initialSetup, g.rules, g.timeControl,
-            g.site, g.event, g.pgn, g.result, g.importedAt,
-          ])
-          .stepReset();
+        const keyRows = db.exec(upsertGameSql, {
+          bind: [
+            g.source, g.externalId, g.url, g.whiteUsername, g.blackUsername,
+            g.whiteRating, g.blackRating, g.endTime,
+            g.initialSetup, g.pgn, g.result, g.whiteWinKind, g.blackWinKind, g.importedAt,
+          ],
+          returnValue: "resultRows",
+        }) as unknown as number[][];
+        const gameKey = Number(keyRows[0]?.[0]);
+        if (!Number.isFinite(gameKey)) {
+          throw new Error("Failed to resolve gameKey for upserted game");
+        }
+        delMoves.bind([gameKey]).stepReset();
         for (const m of moves) {
           insMove
-            .bind([m.id, m.gameId, m.fenHashBefore, m.san, m.fenHashAfter, m.result ?? null, m.userColor ?? null, m.winKind ?? null])
+            .bind([gameKey, m.ply, hex16ToBytes(m.fenHashBefore), m.san, hex16ToBytes(m.fenHashAfter)])
             .stepReset();
         }
       }
     } finally {
       delMoves.finalize();
-      insGame.finalize();
       insMove.finalize();
     }
     db.exec("COMMIT");
@@ -292,31 +273,87 @@ function upsertGamesWithMoves(entries: { record: GameRecord; moves: MoveRecord[]
 }
 
 function getMovesForPosition(fenHash: string, includeUsernames?: string[]): MoveRecord[] {
+  const fenHashBytes = hex16ToBytes(fenHash);
   if (includeUsernames !== undefined && includeUsernames.length === 0) {
     return [];
   }
   if (includeUsernames !== undefined && includeUsernames.length > 0) {
-    const placeholders = includeUsernames.map(() => "?").join(",");
-    const sql = `SELECT m.* FROM moves m
-      INNER JOIN games g ON g.uuid = m.gameId
-      WHERE m.fenHashBefore = ? AND g.username IN (${placeholders})`;
+    const users = includeUsernames.map((u) => u.trim().toLowerCase());
+    const placeholders = users.map(() => "?").join(",");
+    const sql = `
+      SELECT
+        m.gameId, m.ply, lower(hex(m.fenHashBefore)) AS fenHashBefore, m.san, lower(hex(m.fenHashAfter)) AS fenHashAfter,
+        g.result AS result,
+        'w' AS userColor,
+        g.whiteWinKind AS winKind
+      FROM moves m
+      INNER JOIN games g ON g.gameKey = m.gameId
+      WHERE m.fenHashBefore = ?
+        AND LOWER(g.whiteUsername) IN (${placeholders})
+      UNION ALL
+      SELECT
+        m.gameId, m.ply, lower(hex(m.fenHashBefore)) AS fenHashBefore, m.san, lower(hex(m.fenHashAfter)) AS fenHashAfter,
+        g.result AS result,
+        'b' AS userColor,
+        g.blackWinKind AS winKind
+      FROM moves m
+      INNER JOIN games g ON g.gameKey = m.gameId
+      WHERE m.fenHashBefore = ?
+        AND LOWER(g.blackUsername) IN (${placeholders})
+    `;
     return db.exec(sql, {
-      bind: [fenHash, ...includeUsernames],
+      bind: [fenHashBytes, ...users, fenHashBytes, ...users],
       rowMode: "object",
       returnValue: "resultRows",
     }) as unknown as MoveRecord[];
   }
-  return db.exec("SELECT * FROM moves WHERE fenHashBefore = ?", {
-    bind: [fenHash],
-    rowMode: "object",
-    returnValue: "resultRows",
-  }) as unknown as MoveRecord[];
+  // No username filter: treat both sides as potentially "owned" by tracked players.
+  return db.exec(
+    `
+      SELECT
+        m.gameId, m.ply, lower(hex(m.fenHashBefore)) AS fenHashBefore, m.san, lower(hex(m.fenHashAfter)) AS fenHashAfter,
+        g.result AS result,
+        'w' AS userColor,
+        g.whiteWinKind AS winKind
+      FROM moves m
+      INNER JOIN games g ON g.gameKey = m.gameId
+      WHERE m.fenHashBefore = ?
+      UNION ALL
+      SELECT
+        m.gameId, m.ply, lower(hex(m.fenHashBefore)) AS fenHashBefore, m.san, lower(hex(m.fenHashAfter)) AS fenHashAfter,
+        g.result AS result,
+        'b' AS userColor,
+        g.blackWinKind AS winKind
+      FROM moves m
+      INNER JOIN games g ON g.gameKey = m.gameId
+      WHERE m.fenHashBefore = ?
+    `,
+    {
+      bind: [fenHashBytes, fenHashBytes],
+      rowMode: "object",
+      returnValue: "resultRows",
+    },
+  ) as unknown as MoveRecord[];
 }
 
-function getGamesByUuids(uuids: string[]): GameRecord[] {
+function hex16ToBytes(hex: string): Uint8Array {
+  const clean = hex.trim().toLowerCase();
+  if (!/^[0-9a-f]{16}$/.test(clean)) {
+    throw new Error(`Invalid 64-bit hex key: ${hex}`);
+  }
+  const out = new Uint8Array(8);
+  for (let i = 0; i < 8; i++) {
+    const byteHex = clean.slice(i * 2, i * 2 + 2);
+    out[i] = Number.parseInt(byteHex, 16);
+  }
+  return out;
+}
+
+
+function getGamesByUuids(uuids: number[]): GameRecord[] {
   if (uuids.length === 0) return [];
   const placeholders = uuids.map(() => "?").join(",");
-  return db.exec(`SELECT * FROM games WHERE uuid IN (${placeholders})`, {
+  return db.exec(`SELECT * FROM games WHERE gameKey IN (${placeholders})`, {
     bind: uuids,
     rowMode: "object",
     returnValue: "resultRows",
@@ -420,19 +457,15 @@ function touchArchivesChecked(rows: ArchiveCheckedRow[]) {
 
 function listPlayers(): PlayerListRow[] {
   const sql = `
-    WITH users AS (
-      SELECT DISTINCT username FROM games
-      UNION
-      SELECT DISTINCT username FROM archives
-    )
+    WITH users AS (SELECT DISTINCT username FROM archives)
     SELECT
       u.username AS username,
-      (SELECT COUNT(*) FROM games g WHERE g.username = u.username) AS gameCount,
+      (SELECT COUNT(*) FROM games g WHERE g.whiteUsername = u.username OR g.blackUsername = u.username) AS gameCount,
       (SELECT MIN(a.path) FROM archives a WHERE a.username = u.username) AS minArchivePath,
       (SELECT MAX(a.path) FROM archives a WHERE a.username = u.username) AS maxArchivePath,
       (SELECT MAX(COALESCE(a.checked_at, a.fetched_at)) FROM archives a WHERE a.username = u.username) AS lastSyncAt,
       (SELECT strftime('%Y/%m', datetime(MIN(g.endTime), 'unixepoch')) FROM games g
-        WHERE g.username = u.username AND g.endTime IS NOT NULL) AS minGameEndMonth
+        WHERE (g.whiteUsername = u.username OR g.blackUsername = u.username) AND g.endTime IS NOT NULL) AS minGameEndMonth
     FROM users u
     ORDER BY u.username COLLATE NOCASE
   `;
@@ -455,10 +488,12 @@ function deletePlayer(username: string) {
   if (!u) return;
   db.exec("BEGIN");
   try {
-    db.exec("DELETE FROM moves WHERE gameId IN (SELECT uuid FROM games WHERE username = ?)", {
-      bind: [u],
+    db.exec("DELETE FROM moves WHERE gameId IN (SELECT gameKey FROM games WHERE whiteUsername = ? OR blackUsername = ?)", {
+      bind: [u, u],
     });
-    db.exec("DELETE FROM games WHERE username = ?", { bind: [u] });
+    db.exec("DELETE FROM games WHERE whiteUsername = ? OR blackUsername = ?", {
+      bind: [u, u],
+    });
     db.exec("DELETE FROM archives WHERE username = ?", { bind: [u] });
     db.exec("COMMIT");
   } catch (e) {

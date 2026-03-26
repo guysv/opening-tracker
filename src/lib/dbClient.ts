@@ -59,10 +59,14 @@ async function request<T>(msg: Record<string, unknown>): Promise<T> {
   });
 }
 
-export function initDb(): Promise<void> {
+export function initDb(resetOnInit = false): Promise<void> {
   if (readyPromise) return readyPromise;
 
-  worker = new Worker(new URL("../workers/db.worker.js", import.meta.url), { type: "module" });
+  const workerUrl = new URL("../workers/db.worker.js", import.meta.url);
+  if (resetOnInit) {
+    workerUrl.searchParams.set("resetOnInit", "1");
+  }
+  worker = new Worker(workerUrl, { type: "module" });
 
   readyPromise = new Promise<void>((resolve, reject) => {
     worker!.onmessage = (event: MessageEvent) => {
@@ -125,13 +129,13 @@ export async function upsertStockfishEval(row: StockfishEvalRecord): Promise<voi
   await request({ type: "UPSERT_STOCKFISH_EVAL", row });
 }
 
-export async function getGamesByUuids(uuids: string[]): Promise<Map<string, GameRecord>> {
+export async function getGamesByUuids(uuids: number[]): Promise<Map<number, GameRecord>> {
   const unique = [...new Set(uuids)];
   if (unique.length === 0) return new Map();
   const rows = await request<GameRecord[]>({ type: "GET_GAMES_BY_UUIDS", uuids: unique });
-  const map = new Map<string, GameRecord>();
+  const map = new Map<number, GameRecord>();
   for (const g of rows ?? []) {
-    if (g.uuid) map.set(g.uuid, g);
+    if (Number.isFinite(g.gameKey)) map.set(g.gameKey, g);
   }
   return map;
 }

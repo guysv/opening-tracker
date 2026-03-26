@@ -1,7 +1,7 @@
 import BitboardChess from "bitboard-chess";
 import pgnParser from "pgn-parser";
 
-import { sanForEngine, inferUserColor } from "./gameMoves";
+import { sanForEngine } from "./gameMoves";
 import { getGamesByUuids, getMovesForPosition } from "./dbClient";
 import type { GameRecord, MoveRecord } from "./gamesDb";
 
@@ -178,10 +178,11 @@ function getGameRatings(g: GameRecord): { whiteRating: number | null; blackRatin
   if (g.whiteRating != null || g.blackRating != null) {
     return { whiteRating: g.whiteRating, blackRating: g.blackRating };
   }
-  let cached = pgnEloCache.get(g.uuid);
+  const cacheKey = `${g.source}:${g.externalId}`;
+  let cached = pgnEloCache.get(cacheKey);
   if (!cached) {
     cached = extractEloFromPgn(g.pgn);
-    pgnEloCache.set(g.uuid, cached);
+    pgnEloCache.set(cacheKey, cached);
   }
   return { whiteRating: cached.whiteElo, blackRating: cached.blackElo };
 }
@@ -194,7 +195,7 @@ function opponentRating(r: MoveRecord, g: GameRecord): number | null {
 
 export type PositionData = {
   records: MoveRecord[];
-  games: Map<string, GameRecord>;
+  games: Map<number, GameRecord>;
 };
 
 export async function fetchPositionData(
@@ -203,20 +204,12 @@ export async function fetchPositionData(
 ): Promise<PositionData> {
   const records = await getMovesForPosition(posHash, includeUsernames);
   const gameIds = [...new Set(records.map((r) => r.gameId))];
-  const games = gameIds.length > 0 ? await getGamesByUuids(gameIds) : new Map<string, GameRecord>();
-
-  const enriched = records.map((r) => {
-    if (r.userColor !== undefined) return r;
-    const g = games.get(r.gameId);
-    if (!g) return r;
-    const userColor = inferUserColor(g);
-    return userColor ? { ...r, userColor } : r;
-  });
+  const games = gameIds.length > 0 ? await getGamesByUuids(gameIds) : new Map<number, GameRecord>();
 
   // Warm PGN elo cache eagerly so subsequent filterPositionData calls are instant
   for (const g of games.values()) getGameRatings(g);
 
-  return { records: enriched, games };
+  return { records, games };
 }
 
 export function filterPositionData(
@@ -241,7 +234,7 @@ export function filterPositionData(
 }
 
 export type MoveGameListItem = {
-  gameId: string;
+  gameId: number;
   url: string;
   whiteUsername: string;
   blackUsername: string;

@@ -83,7 +83,12 @@ type ParseBatchResultMessage = {
   type: "PARSE_BATCH_RESULT";
   payload: {
     requestId: number;
-    results: { gameId: string; moves: MoveRecord[] }[];
+    results: {
+      gameId: string;
+      moves: MoveRecord[];
+      whiteWinKind: "trap" | "mate" | null;
+      blackWinKind: "trap" | "mate" | null;
+    }[];
   };
 };
 
@@ -127,8 +132,26 @@ function shardRoundRobin(records: GameRecord[], poolSize: number): GameRecord[][
   return chunks;
 }
 
-async function parseRecordsWithWorkerPool(records: GameRecord[]): Promise<Map<string, MoveRecord[]>> {
-  const map = new Map<string, MoveRecord[]>();
+async function parseRecordsWithWorkerPool(
+  records: GameRecord[],
+): Promise<
+  Map<
+    string,
+    {
+      moves: MoveRecord[];
+      whiteWinKind: "trap" | "mate" | null;
+      blackWinKind: "trap" | "mate" | null;
+    }
+  >
+> {
+  const map = new Map<
+    string,
+    {
+      moves: MoveRecord[];
+      whiteWinKind: "trap" | "mate" | null;
+      blackWinKind: "trap" | "mate" | null;
+    }
+  >();
 
   if (records.length === 0) {
     postProgress({ phase: "parse", current: 0, total: 0 });
@@ -145,7 +168,14 @@ async function parseRecordsWithWorkerPool(records: GameRecord[]): Promise<Map<st
   try {
     const promises = chunks.map(
       (games, workerIndex) =>
-        new Promise<{ gameId: string; moves: MoveRecord[] }[]>((resolve, reject) => {
+        new Promise<
+          {
+            gameId: string;
+            moves: MoveRecord[];
+            whiteWinKind: "trap" | "mate" | null;
+            blackWinKind: "trap" | "mate" | null;
+          }[]
+        >((resolve, reject) => {
           if (games.length === 0) {
             resolve([]);
             return;
@@ -190,8 +220,8 @@ async function parseRecordsWithWorkerPool(records: GameRecord[]): Promise<Map<st
     const parts = await Promise.all(promises);
 
     for (const part of parts) {
-      for (const { gameId, moves } of part) {
-        map.set(gameId, moves);
+      for (const { gameId, moves, whiteWinKind, blackWinKind } of part) {
+        map.set(gameId, { moves, whiteWinKind, blackWinKind });
       }
     }
   } finally {
@@ -312,7 +342,7 @@ async function buildEntriesFromGames(
   for (const game of allGames) {
     const pgn = typeof game.pgn === "string" && game.pgn.length > 0 ? game.pgn : null;
     const parsedOnce = pgn ? parseChessComPgnOnce(pgn) : null;
-    const record = toGameRecord(game, normalizedUsername, parsedOnce ?? undefined);
+    const record = toGameRecord(game, parsedOnce ?? undefined);
     if (record) {
       filteredRecords.push(record);
       truncateCaches.push(parsedOnce ?? undefined);
@@ -324,10 +354,17 @@ async function buildEntriesFromGames(
   );
 
   const movesByGame = await parseRecordsWithWorkerPool(records);
-  const entries = records.map((record) => ({
-    record,
-    moves: movesByGame.get(record.uuid) ?? [],
-  }));
+  const entries = records.map((record) => {
+    const parsed = movesByGame.get(`${record.source}:${record.externalId}`);
+    if (parsed) {
+      record.whiteWinKind = parsed.whiteWinKind;
+      record.blackWinKind = parsed.blackWinKind;
+    }
+    return {
+      record,
+      moves: parsed?.moves ?? [],
+    };
+  });
   return entries.filter((e) => e.moves.length > 0);
 }
 

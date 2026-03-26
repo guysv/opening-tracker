@@ -7,9 +7,6 @@ import { resolveStartFen, STANDARD_START_PLACEMENT } from "./startFen";
 /** Half-moves (plies) kept per game (opening slice only). */
 export const MAX_STORED_PLIES = 30;
 
-/** Digits for the `id` suffix (zero-padded move index within a game). */
-const MOVE_INDEX_PAD = 5;
-
 const NAG_SUFFIXES = ["!!", "??", "!?", "?!", "!", "?"] as const;
 
 function zobristKeyToHex(key: bigint): string {
@@ -32,35 +29,6 @@ export function sanForEngine(raw: string): string {
 }
 
 export { resolveStartFen } from "./startFen";
-
-/** Resolve which color `username` played using PGN [White]/[Black] when JSON fields are missing or mismatched. */
-function userColorFromPgnHeaders(pgn: string | null, username: string): "w" | "b" | undefined {
-  if (!pgn || !username) return undefined;
-  const u = username.trim().toLowerCase();
-  if (!u) return undefined;
-
-  try {
-    const parsed = pgnParser.parse(pgn);
-    const firstGame = Array.isArray(parsed) ? parsed[0] : null;
-    const headers = firstGame && Array.isArray(firstGame.headers) ? firstGame.headers : [];
-
-    let white = "";
-    let black = "";
-    for (const h of headers) {
-      if (!h || typeof h.name !== "string" || typeof h.value !== "string") continue;
-      const name = h.name.toLowerCase();
-      if (name === "white") white = h.value;
-      else if (name === "black") black = h.value;
-    }
-
-    if (white.trim().toLowerCase() === u) return "w";
-    if (black.trim().toLowerCase() === u) return "b";
-  } catch {
-    /* ignore */
-  }
-
-  return undefined;
-}
 
 export function extractMainLineSans(pgn: string | null): string[] {
   if (!pgn) {
@@ -161,16 +129,6 @@ export function truncateGameRecordForStorage(
   return { ...record, pgn: truncateGamePgnForStorage(record.pgn, MAX_STORED_PLIES, cached) };
 }
 
-export function inferUserColor(
-  record: Pick<GameRecord, "username" | "whiteUsername" | "blackUsername" | "pgn">,
-): "w" | "b" | undefined {
-  const u = record.username?.trim();
-  if (!u) return undefined;
-  if (record.whiteUsername.trim().toLowerCase() === u.toLowerCase()) return "w";
-  if (record.blackUsername.trim().toLowerCase() === u.toLowerCase()) return "b";
-  return userColorFromPgnHeaders(record.pgn, u);
-}
-
 function popcount64(n: bigint): number {
   let count = 0;
   let v = n;
@@ -199,20 +157,21 @@ function materialBalance(board: BitboardChess): number {
   return w - b;
 }
 
-function isUserWin(result: string | undefined, userColor: "w" | "b" | undefined): boolean {
-  if (!result || !userColor) return false;
-  if (result === "1-0") return userColor === "w";
-  if (result === "0-1") return userColor === "b";
+function isSideWin(result: string | null, side: "w" | "b"): boolean {
+  if (!result) return false;
+  if (result === "1-0") return side === "w";
+  if (result === "0-1") return side === "b";
   return false;
 }
 
-export function buildMoveRecords(record: GameRecord): MoveRecord[] {
-  const gameId = record.uuid;
+export function buildMoveRecords(
+  record: GameRecord,
+): { moves: MoveRecord[]; whiteWinKind: "trap" | "mate" | null; blackWinKind: "trap" | "mate" | null } {
   const pgn = record.pgn;
   const sans = extractMainLineSans(pgn).slice(0, MAX_STORED_PLIES);
 
   if (sans.length === 0) {
-    return [];
+    return { moves: [], whiteWinKind: null, blackWinKind: null };
   }
 
   const board = new BitboardChess();
@@ -230,12 +189,11 @@ export function buildMoveRecords(record: GameRecord): MoveRecord[] {
     }
   }
 
-  const result = record.result ?? undefined;
-  const userColor = inferUserColor(record);
-
   const out: MoveRecord[] = [];
-  let maxUserAdvantage = 0;
-  let earlyMateByUser = false;
+  let maxWhiteAdvantage = 0;
+  let maxBlackAdvantage = 0;
+  let earlyMateByWhite = false;
+  let earlyMateByBlack = false;
 
   for (let i = 0; i < sans.length; i++) {
     const san = sans[i]!;
@@ -247,39 +205,45 @@ export function buildMoveRecords(record: GameRecord): MoveRecord[] {
       break;
     }
 
-    if (userColor) {
-      const bal = materialBalance(board);
-      const adv = userColor === "w" ? bal : -bal;
-      if (adv > maxUserAdvantage) maxUserAdvantage = adv;
+    const bal = materialBalance(board);
+    const advW = bal;
+    const advB = -bal;
+    if (advW > maxWhiteAdvantage) maxWhiteAdvantage = advW;
+    if (advB > maxBlackAdvantage) maxBlackAdvantage = advB;
 
-      const userMoved = (i % 2 === 0) === (userColor === "w");
-      if (userMoved && san.includes("#")) earlyMateByUser = true;
+    // In SAN list, `i` is the move index within the main line:
+    // - i even => White played that SAN
+    // - i odd  => Black played that SAN
+    if (san.includes("#")) {
+      if (i % 2 === 0) earlyMateByWhite = true;
+      else earlyMateByBlack = true;
     }
 
     const fenHashAfter = zobristKeyToHex(board.getZobristKey());
-    const id = `${gameId}:${String(i).padStart(MOVE_INDEX_PAD, "0")}`;
-
     out.push({
-      id,
-      gameId,
+      gameId: 0,
+      ply: i,
       fenHashBefore,
       san,
       fenHashAfter,
-      result,
-      userColor,
     });
   }
 
-  if (isUserWin(result, userColor)) {
-    const kind: "mate" | "trap" | undefined = earlyMateByUser
+  const whiteWinKind: "trap" | "mate" | null = isSideWin(record.result, "w")
+    ? earlyMateByWhite
       ? "mate"
-      : maxUserAdvantage >= 3
+      : maxWhiteAdvantage >= 3
         ? "trap"
-        : undefined;
-    if (kind) {
-      for (const m of out) m.winKind = kind;
-    }
-  }
+        : null
+    : null;
 
-  return out;
+  const blackWinKind: "trap" | "mate" | null = isSideWin(record.result, "b")
+    ? earlyMateByBlack
+      ? "mate"
+      : maxBlackAdvantage >= 3
+        ? "trap"
+        : null
+    : null;
+
+  return { moves: out, whiteWinKind, blackWinKind };
 }

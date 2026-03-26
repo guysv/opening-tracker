@@ -22,6 +22,7 @@ import { OpeningTracker } from "./OpeningTracker";
 import { Sidebar } from "./Sidebar";
 
 const DEFAULT_ELO_RANGE: EloRange = [0, 3500];
+const DB_RESET_ON_STARTUP_FLAG = "openingTracker:resetDbOnStartup";
 
 type WorkerResponse =
   | {
@@ -82,7 +83,11 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    initDb()
+    const resetOnInit = localStorage.getItem(DB_RESET_ON_STARTUP_FLAG) === "1";
+    if (resetOnInit) {
+      localStorage.removeItem(DB_RESET_ON_STARTUP_FLAG);
+    }
+    initDb(resetOnInit)
       .then(() => {
         dbReadyRef.current = true;
         return listPlayers();
@@ -375,12 +380,13 @@ export function App() {
   async function handleCleanDb() {
     try {
       await clearGamesStore();
-      setDisabledUsernames({});
-      setGamesDataRevision((n) => n + 1);
-      setStatus("Database cleared.");
+      localStorage.removeItem(DB_RESET_ON_STARTUP_FLAG);
+      location.reload();
     } catch (error) {
+      localStorage.setItem(DB_RESET_ON_STARTUP_FLAG, "1");
       const message = error instanceof Error ? error.message : "Unknown clear error.";
-      setStatus(`Failed to clear database: ${message}`);
+      setStatus(`Failed to clear immediately, will clear on restart: ${message}`);
+      location.reload();
     }
   }
 

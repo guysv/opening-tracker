@@ -13,7 +13,12 @@ type ParseBatchResultMessage = {
   type: "PARSE_BATCH_RESULT";
   payload: {
     requestId: number;
-    results: { gameId: string; moves: MoveRecord[] }[];
+    results: {
+      gameId: string;
+      moves: MoveRecord[];
+      whiteWinKind: "trap" | "mate" | null;
+      blackWinKind: "trap" | "mate" | null;
+    }[];
   };
 };
 
@@ -25,10 +30,10 @@ self.onmessage = (event: MessageEvent<ParseBatchMessage>) => {
   }
 
   const { requestId, games } = message.payload;
-  const results = games.map((g) => ({
-    gameId: g.uuid,
-    moves: buildMoveRecords(g),
-  }));
+  const results = games.map((g) => {
+    const { moves, whiteWinKind, blackWinKind } = buildMoveRecords(g);
+    return { gameId: `${g.source}:${g.externalId}`, moves, whiteWinKind, blackWinKind };
+  });
 
   const response: ParseBatchResultMessage = {
     type: "PARSE_BATCH_RESULT",

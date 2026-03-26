@@ -3,43 +3,39 @@ import pgnParser from "pgn-parser";
 import { isStandardImportStart } from "./startFen";
 
 export type MoveRecord = {
-  id: string;
-  gameId: string;
+  gameId: number;
+  ply: number;
   /** 64-bit Zobrist key from `bitboard-chess` `getZobristKey()`, hex string (16 chars). */
   fenHashBefore: string;
   san: string;
   fenHashAfter: string;
-  /** PGN Result header: "1-0", "0-1", "1/2-1/2", or "*". Optional for pre-existing records. */
+  /** PGN Result header: "1-0", "0-1", "1/2-1/2", or "*". Filled by `GET_MOVES_FOR_POSITION` query. */
   result?: string;
-  /** Which color the imported user played: "w" or "b". Optional for pre-existing records. */
+  /** Perspective color for aggregation: "w" or "b". Filled by `GET_MOVES_FOR_POSITION` query. */
   userColor?: "w" | "b";
-  /** How the user won within the opening window: "trap" (material ≥ +3), "mate" (early checkmate), or omitted for regular wins/non-wins. */
+  /** How the relevant side won within the opening window: "trap" (material >= +3), "mate" (early checkmate). */
   winKind?: "trap" | "mate";
 };
 
 export type GameRecord = {
-  uuid: string;
+  gameKey: number;
+  source: string;
+  externalId: string;
   url: string;
-  username: string;
   whiteUsername: string;
   blackUsername: string;
   whiteRating: number | null;
   blackRating: number | null;
   endTime: number | null;
-  timeClass: string | null;
-  rated: boolean | null;
-  eco: string | null;
-  /** Final position on Chess.com (matches PGN `[CurrentPosition]`). Not the start FEN for replay. */
-  fen: string | null;
   /** Starting position from the API (`initial_setup`). Use this (or default) when replaying the PGN from move 1. */
   initialSetup: string | null;
-  rules: string | null;
-  timeControl: string | null;
-  site: string | null;
-  event: string | null;
   pgn: string | null;
   /** PGN Result header: "1-0", "0-1", "1/2-1/2", or "*". */
   result: string | null;
+  /** Outcome label when the game is won by White. */
+  whiteWinKind: "trap" | "mate" | null;
+  /** Outcome label when the game is won by Black. */
+  blackWinKind: "trap" | "mate" | null;
   importedAt: number;
 };
 
@@ -67,10 +63,6 @@ export type ChessArchiveGame = {
 
 function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
-}
-
-function asBoolean(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
 }
 
 function asNumber(value: unknown): number | null {
@@ -120,13 +112,10 @@ export function parseChessComPgnOnce(pgn: string): ParseChessComPgnResult | null
 }
 
 function parsePgnHeaders(pgn: string | null): {
-  timeControl: string | null;
-  site: string | null;
-  event: string | null;
   result: string | null;
 } {
   if (!pgn) {
-    return { timeControl: null, site: null, event: null, result: null };
+    return { result: null };
   }
 
   try {
@@ -143,26 +132,22 @@ function parsePgnHeaders(pgn: string | null): {
     }
 
     return {
-      timeControl: values.get("timecontrol") ?? null,
-      site: values.get("site") ?? null,
-      event: values.get("event") ?? null,
       result: values.get("result") ?? null,
     };
   } catch {
-    return { timeControl: null, site: null, event: null, result: null };
+    return { result: null };
   }
 }
 
 export function toGameRecord(
   game: ChessArchiveGame,
-  username: string,
   /** When provided, skips redundant `pgn-parser` work (import worker). */
   parsedOnce?: ParseChessComPgnResult | null,
 ): GameRecord | null {
-  const uuid = asString(game.uuid);
   const url = asString(game.url);
+  const externalId = gameIdFromUrl(url);
 
-  if (!uuid || !url) {
+  if (!externalId || !url) {
     return null;
   }
 
@@ -179,33 +164,45 @@ export function toGameRecord(
 
   const pgnHeaders = parsedOnce
     ? {
-        timeControl: parsedOnce.headerMap.get("timecontrol") ?? null,
-        site: parsedOnce.headerMap.get("site") ?? null,
-        event: parsedOnce.headerMap.get("event") ?? null,
         result: parsedOnce.headerMap.get("result") ?? null,
       }
     : parsePgnHeaders(pgn);
 
   return {
-    uuid,
+    gameKey: 0,
+    source: "chesscom",
+    externalId,
     url,
-    username,
-    whiteUsername: asString(game.white?.username) ?? "",
-    blackUsername: asString(game.black?.username) ?? "",
+    whiteUsername: (asString(game.white?.username) ?? "").trim().toLowerCase(),
+    blackUsername: (asString(game.black?.username) ?? "").trim().toLowerCase(),
     whiteRating: asNumber(game.white?.rating),
     blackRating: asNumber(game.black?.rating),
     endTime: asNumber(game.end_time),
-    timeClass: asString(game.time_class),
-    rated: asBoolean(game.rated),
-    eco: asString(game.eco),
-    fen: asString(game.fen),
     initialSetup,
-    rules: asString(game.rules),
-    timeControl: pgnHeaders.timeControl ?? asString(game.time_control),
-    site: pgnHeaders.site,
-    event: pgnHeaders.event,
     pgn,
     result: pgnHeaders.result,
+    whiteWinKind: null,
+    blackWinKind: null,
     importedAt: Date.now(),
   };
+}
+
+function gameIdFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.trim().toLowerCase();
+    const path = parsed.pathname.replace(/\/+$/, "");
+    if (!host || !path) return null;
+    if (host.endsWith("chess.com")) {
+      const parts = path.split("/").filter(Boolean);
+      if (parts.length >= 3 && parts[0] === "game" && (parts[1] === "live" || parts[1] === "daily")) {
+        const last = parts[parts.length - 1];
+        if (last && last !== "live" && last !== "daily") return last;
+      }
+    }
+    return path.split("/").filter(Boolean).pop() ?? null;
+  } catch {
+    return null;
+  }
 }
