@@ -66,7 +66,7 @@ export function App() {
 
   const worker = useMemo(
     () =>
-      new Worker(new URL("../workers/gameImport.worker.js", import.meta.url), {
+      new Worker(new URL("./workers/gameImport.worker.js", import.meta.url), {
         type: "module",
       }),
     [],
