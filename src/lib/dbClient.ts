@@ -63,7 +63,7 @@ export function initDb(resetOnInit = false): Promise<void> {
   if (readyPromise) return readyPromise;
 
   // Use ./workers/ (not ../workers/): the bundle lives next to the workers/ folder;
-  // ../ escapes the repo subpath on hosts like GitHub Pages.
+  // ../ escapes the repo subpath on static hosts that use a URL prefix.
   const workerUrl = new URL("./workers/db.worker.js", import.meta.url);
   if (resetOnInit) {
     workerUrl.searchParams.set("resetOnInit", "1");
