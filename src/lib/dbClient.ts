@@ -69,6 +69,12 @@ export function initDb(resetOnInit = false): Promise<void> {
   worker = new Worker(workerUrl, { type: "module" });
 
   readyPromise = new Promise<void>((resolve, reject) => {
+    worker!.onerror = (event) => {
+      reject(new Error(event.message || "DB worker crashed before READY"));
+    };
+    worker!.onmessageerror = () => {
+      reject(new Error("DB worker message deserialization failed"));
+    };
     worker!.onmessage = (event: MessageEvent) => {
       const data = event.data;
 
@@ -119,6 +125,17 @@ export async function getMovesForPosition(
     msg.includeUsernames = includeUsernames;
   }
   return (await request<MoveRecord[]>(msg)) ?? [];
+}
+
+export async function getPositionData(
+  fenHash: string,
+  includeUsernames?: string[],
+): Promise<{ records: MoveRecord[]; games: GameRecord[] }> {
+  const msg: Record<string, unknown> = { type: "GET_POSITION_DATA", fenHash };
+  if (includeUsernames !== undefined) {
+    msg.includeUsernames = includeUsernames;
+  }
+  return (await request<{ records: MoveRecord[]; games: GameRecord[] }>(msg)) ?? { records: [], games: [] };
 }
 
 export async function getStockfishEval(fenHash: string): Promise<StockfishEvalRecord | null> {

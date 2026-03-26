@@ -33,6 +33,7 @@ type PlayerListRow = {
 type RequestMessage =
   | { type: "UPSERT_GAMES_WITH_MOVES"; id: number; entries: { record: GameRecord; moves: MoveRecord[] }[] }
   | { type: "GET_MOVES_FOR_POSITION"; id: number; fenHash: string; includeUsernames?: string[] }
+  | { type: "GET_POSITION_DATA"; id: number; fenHash: string; includeUsernames?: string[] }
   | { type: "GET_GAMES_BY_UUIDS"; id: number; uuids: number[] }
   | { type: "GET_STOCKFISH_EVAL"; id: number; fenHash: string }
   | { type: "UPSERT_STOCKFISH_EVAL"; id: number; row: StockfishEvalRecord }
@@ -116,6 +117,7 @@ CREATE TABLE IF NOT EXISTS bookmarks (
 `;
 
 type Database = InstanceType<Sqlite3Static["oo1"]["DB"]>;
+type PositionDataPayload = { records: MoveRecord[]; games: GameRecord[] };
 
 let sqlite3: Sqlite3Static;
 let db: Database;
@@ -360,6 +362,31 @@ function getGamesByUuids(uuids: number[]): GameRecord[] {
   }) as unknown as GameRecord[];
 }
 
+function getPositionData(fenHash: string, includeUsernames?: string[]): PositionDataPayload {
+  const records = getMovesForPosition(fenHash, includeUsernames);
+  const gamesById = new Map<number, GameRecord>();
+  const gameRows = db.exec(
+    `
+      SELECT DISTINCT
+        g.gameKey, g.source, g.externalId, g.url, g.whiteUsername, g.blackUsername,
+        g.whiteRating, g.blackRating, g.endTime, g.initialSetup, g.pgn, g.result,
+        g.whiteWinKind, g.blackWinKind, g.importedAt
+      FROM moves m
+      INNER JOIN games g ON g.gameKey = m.gameId
+      WHERE m.fenHashBefore = ?
+    `,
+    {
+      bind: [hex16ToBytes(fenHash)],
+      rowMode: "object",
+      returnValue: "resultRows",
+    },
+  ) as unknown as GameRecord[];
+  for (const g of gameRows) {
+    gamesById.set(g.gameKey, g);
+  }
+  return { records, games: [...gamesById.values()] };
+}
+
 function getStockfishEval(fenHash: string): StockfishEvalRecord | null {
   const rows = db.exec("SELECT * FROM stockfish_eval WHERE fen_hash = ?", {
     bind: [fenHash],
@@ -571,6 +598,9 @@ initDb()
             break;
           case "GET_MOVES_FOR_POSITION":
             reply(msg.id, getMovesForPosition(msg.fenHash, msg.includeUsernames));
+            break;
+          case "GET_POSITION_DATA":
+            reply(msg.id, getPositionData(msg.fenHash, msg.includeUsernames));
             break;
           case "GET_GAMES_BY_UUIDS":
             reply(msg.id, getGamesByUuids(msg.uuids));

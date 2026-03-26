@@ -2,7 +2,7 @@ import BitboardChess from "bitboard-chess";
 import pgnParser from "pgn-parser";
 
 import { sanForEngine } from "./gameMoves";
-import { getGamesByUuids, getMovesForPosition } from "./dbClient";
+import { getPositionData } from "./dbClient";
 import type { GameRecord, MoveRecord } from "./gamesDb";
 
 export type EloRange = [number, number];
@@ -202,9 +202,12 @@ export async function fetchPositionData(
   posHash: string,
   includeUsernames?: string[],
 ): Promise<PositionData> {
-  const records = await getMovesForPosition(posHash, includeUsernames);
-  const gameIds = [...new Set(records.map((r) => r.gameId))];
-  const games = gameIds.length > 0 ? await getGamesByUuids(gameIds) : new Map<number, GameRecord>();
+  const payload = await getPositionData(posHash, includeUsernames);
+  const records = payload.records;
+  const games = new Map<number, GameRecord>();
+  for (const g of payload.games) {
+    if (Number.isFinite(g.gameKey)) games.set(g.gameKey, g);
+  }
 
   // Warm PGN elo cache eagerly so subsequent filterPositionData calls are instant
   for (const g of games.values()) getGameRatings(g);
