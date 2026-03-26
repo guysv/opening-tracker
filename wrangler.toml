@@ -1,3 +1,4 @@
-# Optional: used by wrangler CLI. Pages project name is passed to deploy, e.g.
-#   bun run cf:pages:deploy -- --project-name=opening-tracker
+# Cloudflare Pages — avoids deploy warning; matches `bun run build` output.
+name = "opening-tracker"
 compatibility_date = "2025-03-15"
+pages_build_output_dir = "dist"
