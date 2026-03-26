@@ -1,4 +1,5 @@
 import { $ } from "bun";
+import { copyFile } from "fs/promises";
 import { resolve } from "path";
 
 const startMs = performance.now();
@@ -32,7 +33,9 @@ if (!result.success) {
 }
 
 const sqliteDist = resolve("node_modules/@sqlite.org/sqlite-wasm/dist");
-await $`mkdir -p dist/sqlite3 && cp ${sqliteDist}/index.mjs ${sqliteDist}/sqlite3.wasm dist/sqlite3/`;
+await $`mkdir -p dist/sqlite3 && cp ${sqliteDist}/index.mjs ${sqliteDist}/sqlite3.wasm ${sqliteDist}/sqlite3-opfs-async-proxy.js dist/sqlite3/`;
+
+await copyFile(resolve("_headers"), resolve("dist/_headers"));
 
 const stockfishBin = resolve("node_modules/stockfish/bin");
 await $`mkdir -p dist/stockfish && cp ${stockfishBin}/stockfish-18-lite-single.js ${stockfishBin}/stockfish-18-lite-single.wasm dist/stockfish/`;

@@ -1,0 +1,6 @@
+# Cloudflare Pages — https://developers.cloudflare.com/pages/configuration/headers/
+# Cross-origin isolation for sqlite-wasm OPFS / SharedArrayBuffer (`credentialless` avoids
+# blocking typical same-origin wasm/script loads; no service worker required).
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
