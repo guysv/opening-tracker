@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  deployments: write # Cloudflare wrangler-action can create GitHub deployment entries
 
 jobs:
   build-and-release:
@@ -28,6 +29,16 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: bun
+          # Tag builds: map deployment to production branch so opening-tracker.pages.dev updates.
+          command: pages deploy dist --project-name=opening-tracker --branch=main
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package dist as tar.gz
         run: |
