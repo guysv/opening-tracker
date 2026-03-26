@@ -14,6 +14,7 @@ import {
 import { truncateGameRecordForStorage } from "../lib/gameMoves";
 
 const CHESS_PUB_BASE = "https://api.chess.com/pub/";
+const MAX_ARCHIVE_DOWNLOAD_CONCURRENCY = 6;
 
 /**
  * Conditional **request** headers (`If-Modified-Since`, `If-None-Match`) are blocked by CORS
@@ -243,6 +244,8 @@ async function downloadArchives(
   const checks: ArchiveCheckedItem[] = [];
   const dec = new TextDecoder();
   const cache = archiveLastModifiedByPath ?? {};
+  const concurrency = Math.max(1, Math.min(MAX_ARCHIVE_DOWNLOAD_CONCURRENCY, paths.length));
+  let completed = 0;
 
   async function consumeGetResponse(response: Response, archivePath: string): Promise<void> {
     if (response.status === 404) return;
@@ -280,8 +283,7 @@ async function downloadArchives(
     allGames.push(...(data.games as ChessArchiveGame[]));
   }
 
-  for (let i = 0; i < paths.length; i++) {
-    const archivePath = paths[i]!;
+  async function downloadOne(archivePath: string): Promise<void> {
     const archiveUrl = new URL(
       `player/${normalizedUsername}/games/${archivePath}`,
       CHESS_PUB_BASE,
@@ -292,14 +294,16 @@ async function downloadArchives(
     if (!hasCachedArchive) {
       const response = await fetch(archiveUrl);
       await consumeGetResponse(response, archivePath);
-      postProgress({ phase: "download", current: i + 1, total: paths.length });
-      continue;
+      completed += 1;
+      postProgress({ phase: "download", current: completed, total: paths.length });
+      return;
     }
 
     const head = await fetch(archiveUrl, { method: "HEAD" });
     if (head.status === 404) {
-      postProgress({ phase: "download", current: i + 1, total: paths.length });
-      continue;
+      completed += 1;
+      postProgress({ phase: "download", current: completed, total: paths.length });
+      return;
     }
 
     let needGet = true;
@@ -320,14 +324,24 @@ async function downloadArchives(
         checkedAt,
         lastModified: headLm,
       });
-      postProgress({ phase: "download", current: i + 1, total: paths.length });
-      continue;
+      completed += 1;
+      postProgress({ phase: "download", current: completed, total: paths.length });
+      return;
     }
 
     const response = await fetch(archiveUrl);
     await consumeGetResponse(response, archivePath);
-    postProgress({ phase: "download", current: i + 1, total: paths.length });
+    completed += 1;
+    postProgress({ phase: "download", current: completed, total: paths.length });
   }
+
+  async function worker(startIndex: number): Promise<void> {
+    for (let i = startIndex; i < paths.length; i += concurrency) {
+      await downloadOne(paths[i]!);
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, (_, workerIndex) => worker(workerIndex)));
 
   return { games: allGames, archives, checks };
 }
