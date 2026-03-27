@@ -127,6 +127,7 @@ export function OpeningTracker({
   const [posData, setPosData] = useState<PositionData | null>(null);
   const colorFilter = loc.color;
   const [previewSan, setPreviewSan] = useState<string | null>(null);
+  const [hoverAnimationHints, setHoverAnimationHints] = useState<{ from: string; to: string }[] | null>(null);
   const [breadcrumbPreviewPly, setBreadcrumbPreviewPly] = useState<number | null>(null);
   const [expandedSan, setExpandedSan] = useState<string | null>(null);
   const [sfEval, setSfEval] = useState<StockfishDisplayEval | null>(null);
@@ -158,7 +159,25 @@ export function OpeningTracker({
     return previewHoveredMove(loc.via, previewSan);
   }, [previewSan, loc.via, replay.error]);
 
-  const handleMoveRowEnter = (san: string) => setPreviewSan(san);
+  const handleMoveRowEnter = (san: string) => {
+    const nextPreview = previewHoveredMove(loc.via, san);
+    if (
+      hoverPreview &&
+      nextPreview &&
+      hoverPreview.fromSq &&
+      hoverPreview.toSq &&
+      nextPreview.fromSq &&
+      nextPreview.toSq
+    ) {
+      setHoverAnimationHints([
+        { from: hoverPreview.toSq, to: hoverPreview.fromSq },
+        { from: nextPreview.fromSq, to: nextPreview.toSq },
+      ]);
+    } else {
+      setHoverAnimationHints(null);
+    }
+    setPreviewSan(san);
+  };
 
   const hoverReplay = useMemo((): ReplayResult | null => {
     if (!previewSan || replay.error) return null;
@@ -203,6 +222,7 @@ export function OpeningTracker({
 
   useEffect(() => {
     setPreviewSan(null);
+    setHoverAnimationHints(null);
   }, [loc.via]);
 
   useEffect(() => {
@@ -762,6 +782,7 @@ export function OpeningTracker({
             flipped={colorFilter === "b"}
             highlightFrom={bookmarkPreview || breadcrumbPreviewReplay ? null : (hoverPreview?.fromSq ?? null)}
             highlightTo={bookmarkPreview || breadcrumbPreviewReplay ? null : (hoverPreview?.toSq ?? null)}
+            animationHints={bookmarkPreview || breadcrumbPreviewReplay ? null : hoverAnimationHints}
           />
         </div>
 
@@ -771,6 +792,7 @@ export function OpeningTracker({
             const next = e.relatedTarget as Node | null;
             if (next && e.currentTarget.contains(next)) return;
             setPreviewSan(null);
+            setHoverAnimationHints(null);
           }}
         >
           {replay.error ? (

@@ -37,6 +37,8 @@ type ChessBoardProps = {
   highlightFrom?: string | null;
   /** Algebraic square (e.g. e4) — last move to (hover preview). */
   highlightTo?: string | null;
+  /** Preferred board transitions to animate when multiple same-piece mappings are possible. */
+  animationHints?: { from: string; to: string }[] | null;
 };
 
 type Coord = { r: number; f: number };
@@ -74,11 +76,38 @@ function coordDistance(a: Coord, b: Coord): number {
   return Math.abs(a.r - b.r) + Math.abs(a.f - b.f);
 }
 
-function buildTransitions(prevRows: (string | null)[][], nextRows: (string | null)[][]): Omit<MoveAnimation, "id">[] {
+function popMatchingCoord(coords: Coord[], target: Coord): boolean {
+  const idx = coords.findIndex((c) => c.r === target.r && c.f === target.f);
+  if (idx < 0) return false;
+  coords.splice(idx, 1);
+  return true;
+}
+
+function buildTransitions(
+  prevRows: (string | null)[][],
+  nextRows: (string | null)[][],
+  hints: { from: Coord; to: Coord }[] = [],
+): Omit<MoveAnimation, "id">[] {
   const transitions: Omit<MoveAnimation, "id">[] = [];
   const prevMap = boardPieceCoords(prevRows);
   const nextMap = boardPieceCoords(nextRows);
   const pieceKinds = new Set([...prevMap.keys(), ...nextMap.keys()]);
+
+  for (const hint of hints) {
+    const pieceFrom = prevRows[hint.from.r]?.[hint.from.f] ?? null;
+    const pieceTo = nextRows[hint.to.r]?.[hint.to.f] ?? null;
+    if (!pieceFrom || pieceFrom !== pieceTo) continue;
+    const sources = prevMap.get(pieceFrom) ?? [];
+    const targets = nextMap.get(pieceFrom) ?? [];
+    if (!popMatchingCoord(sources, hint.from)) continue;
+    if (!popMatchingCoord(targets, hint.to)) {
+      sources.push(hint.from);
+      continue;
+    }
+    if (hint.from.r !== hint.to.r || hint.from.f !== hint.to.f) {
+      transitions.push({ piece: pieceFrom, from: hint.from, to: hint.to });
+    }
+  }
 
   for (const piece of pieceKinds) {
     const sources = [...(prevMap.get(piece) ?? [])];
@@ -106,10 +135,26 @@ function buildTransitions(prevRows: (string | null)[][], nextRows: (string | nul
   return transitions;
 }
 
-export function ChessBoard({ fen, flipped = false, highlightFrom = null, highlightTo = null }: ChessBoardProps) {
+export function ChessBoard({
+  fen,
+  flipped = false,
+  highlightFrom = null,
+  highlightTo = null,
+  animationHints = null,
+}: ChessBoardProps) {
   const rows = useMemo(() => parsePlacement(fen), [fen]);
   const fromCoords = useMemo(() => (highlightFrom ? parseAlgebraicSquare(highlightFrom) : null), [highlightFrom]);
   const toCoords = useMemo(() => (highlightTo ? parseAlgebraicSquare(highlightTo) : null), [highlightTo]);
+  const parsedAnimationHints = useMemo(() => {
+    if (!animationHints || animationHints.length === 0) return [];
+    const parsed: { from: Coord; to: Coord }[] = [];
+    for (const hint of animationHints) {
+      const from = parseAlgebraicSquare(hint.from);
+      const to = parseAlgebraicSquare(hint.to);
+      if (from && to) parsed.push({ from, to });
+    }
+    return parsed;
+  }, [animationHints]);
   const [moveAnims, setMoveAnims] = useState<MoveAnimation[]>([]);
   const animTimerRef = useRef<number | null>(null);
   const lastAnimIdRef = useRef(0);
@@ -138,7 +183,7 @@ export function ChessBoard({ fen, flipped = false, highlightFrom = null, highlig
       setMoveAnims((current) => (current.length === 0 ? current : []));
       return;
     }
-    const transitions = buildTransitions(prevRows, rows);
+    const transitions = buildTransitions(prevRows, rows, parsedAnimationHints);
     if (transitions.length === 0) {
       setMoveAnims((current) => (current.length === 0 ? current : []));
       return;
@@ -152,7 +197,7 @@ export function ChessBoard({ fen, flipped = false, highlightFrom = null, highlig
       setMoveAnims([]);
       animTimerRef.current = null;
     }, MOVE_PREVIEW_ANIM_MS);
-  }, [fen, rows]);
+  }, [fen, rows, parsedAnimationHints]);
 
   const moveAnimsByFrom = useMemo(() => {
     const map = new Map<string, MoveAnimation[]>();
