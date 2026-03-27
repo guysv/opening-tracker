@@ -158,6 +158,8 @@ export function OpeningTracker({
     return previewHoveredMove(loc.via, previewSan);
   }, [previewSan, loc.via, replay.error]);
 
+  const handleMoveRowEnter = (san: string) => setPreviewSan(san);
+
   const hoverReplay = useMemo((): ReplayResult | null => {
     if (!previewSan || replay.error) return null;
     const r = replayMoves([...loc.via, previewSan]);
@@ -800,7 +802,7 @@ export function OpeningTracker({
                       <tr
                         class={`moves-row ${previewSan === m.san ? "moves-row--preview" : ""} ${blunderRow ? "moves-row--blunder" : ""}`}
                         onClick={() => handleMoveClick(m)}
-                        onMouseEnter={() => setPreviewSan(m.san)}
+                        onMouseEnter={() => handleMoveRowEnter(m.san)}
                       >
                         <td class="moves-san">
                           <span class="moves-san-name">{m.san}</span>
