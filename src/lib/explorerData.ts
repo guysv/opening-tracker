@@ -278,6 +278,8 @@ export function filterPositionData(
 
 export type MoveGameListItem = {
   gameId: number;
+  /** Half-move index in the main line (matches `moves.ply` in the DB). */
+  ply: number;
   url: string;
   whiteUsername: string;
   blackUsername: string;
@@ -323,6 +325,7 @@ export function listGamesForMove(
     const ratings = g ? getGameRatings(g) : { whiteRating: null as number | null, blackRating: null as number | null };
     return {
       gameId: r.gameId,
+      ply: r.ply,
       url: g?.url ?? "",
       whiteUsername: g?.whiteUsername ?? "?",
       blackUsername: g?.blackUsername ?? "?",

@@ -51,6 +51,19 @@ function chessComAnalysisUrl(fen: string): string {
   return `https://www.chess.com/analysis?fen=${encodeURIComponent(fen)}`;
 }
 
+/** chess.com live/daily game pages accept `?move=` (1-based half-move index; DB `ply` is 0-based). */
+function gameUrlWithMovePly(url: string, ply: number): string {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    if (!u.hostname.toLowerCase().endsWith("chess.com")) return url;
+    u.searchParams.set("move", String(ply + 1));
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 function winPct(m: AggregatedMove): string | null {
   const decided = m.wins + m.draws + m.losses;
   if (decided === 0) return null;
@@ -942,7 +955,7 @@ export function OpeningTracker({
                                   {g.url ? (
                                     <a
                                       class="moves-game-link"
-                                      href={g.url}
+                                      href={gameUrlWithMovePly(g.url, g.ply)}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       onClick={(e) => e.stopPropagation()}
