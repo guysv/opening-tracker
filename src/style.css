@@ -1341,13 +1341,19 @@ button:hover {
 }
 
 .analyze-link {
-  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--primary);
   text-decoration: none;
   border: 1px solid var(--primary);
   border-radius: var(--radius);
-  padding: 0.35rem 0.75rem;
-  white-space: nowrap;
+  padding: 0.35rem;
+  line-height: 0;
+}
+
+.analyze-link svg {
+  flex-shrink: 0;
 }
 
 .analyze-link:hover {
