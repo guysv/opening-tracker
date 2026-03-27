@@ -17,21 +17,28 @@
 
 html {
   color-scheme: dark;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 #app {
-  min-height: 100dvh;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .layout {
-  min-height: 100dvh;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .bookmark-sidebar {
@@ -1064,11 +1071,13 @@ button:hover {
 .explorer {
   margin-left: 280px;
   margin-right: 260px;
-  min-height: 100dvh;
+  height: 100%;
+  min-height: 0;
   padding: 1.5rem 2rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  overflow: hidden;
 }
 
 .explorer-title-row {
@@ -1077,6 +1086,7 @@ button:hover {
   justify-content: space-between;
   gap: 1rem 1.5rem;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .explorer-title-left {
@@ -1116,6 +1126,7 @@ button:hover {
   flex-wrap: wrap;
   gap: 0.15rem;
   font-size: 0.9rem;
+  flex-shrink: 0;
 }
 
 .breadcrumb {
@@ -1156,6 +1167,7 @@ button:hover {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  flex-shrink: 0;
 }
 
 .explorer-header-left {
@@ -1347,7 +1359,10 @@ button:hover {
 .explorer-body {
   display: flex;
   gap: 2rem;
-  align-items: flex-start;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .board-column {
@@ -1507,6 +1522,9 @@ button:hover {
 .explorer-moves {
   flex: 1;
   min-width: 200px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .explorer-error {
@@ -1533,6 +1551,10 @@ button:hover {
   color: var(--text-muted);
   padding: 0.4rem 0.6rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg);
 }
 
 .moves-row {
