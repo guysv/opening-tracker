@@ -1,5 +1,6 @@
 import { Fragment } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import pkg from "../../package.json";
 
 import { useExplorerLocation } from "../hooks/useExplorerLocation";
 import {
@@ -476,6 +477,11 @@ export function OpeningTracker({
 
   return (
     <main class="explorer">
+      <div class="explorer-title-row">
+        <span class="explorer-title">Opening Tracker</span>
+        <span class="explorer-version">v{pkg.version}</span>
+      </div>
+
       <div class="explorer-breadcrumbs">
         <button
           class={`breadcrumb ${loc.via.length === 0 ? "breadcrumb--active" : ""}`}
