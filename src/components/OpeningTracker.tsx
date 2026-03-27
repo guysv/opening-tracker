@@ -111,6 +111,7 @@ type OpeningTrackerProps = {
   includeUsernames?: string[];
   bookmarksRevision: number;
   onBookmarkToggle: () => void;
+  bookmarkPreview?: { fen: string; posHash: string; sideToMove: "w" | "b" } | null;
 };
 
 export function OpeningTracker({
@@ -120,11 +121,13 @@ export function OpeningTracker({
   includeUsernames,
   bookmarksRevision,
   onBookmarkToggle,
+  bookmarkPreview,
 }: OpeningTrackerProps) {
   const loc = useExplorerLocation();
   const [posData, setPosData] = useState<PositionData | null>(null);
   const colorFilter = loc.color;
   const [previewSan, setPreviewSan] = useState<string | null>(null);
+  const [breadcrumbPreviewPly, setBreadcrumbPreviewPly] = useState<number | null>(null);
   const [expandedSan, setExpandedSan] = useState<string | null>(null);
   const [sfEval, setSfEval] = useState<StockfishDisplayEval | null>(null);
   const [sfLoading, setSfLoading] = useState(false);
@@ -132,9 +135,23 @@ export function OpeningTracker({
   const [hoverSfEval, setHoverSfEval] = useState<StockfishDisplayEval | null>(null);
   const [hoverSfLoading, setHoverSfLoading] = useState(false);
   const [hoverSfError, setHoverSfError] = useState(false);
+  const [bookmarkSfEval, setBookmarkSfEval] = useState<StockfishDisplayEval | null>(null);
+  const [bookmarkSfLoading, setBookmarkSfLoading] = useState(false);
+  const [bookmarkSfError, setBookmarkSfError] = useState(false);
+  const [breadcrumbSfEval, setBreadcrumbSfEval] = useState<StockfishDisplayEval | null>(null);
+  const [breadcrumbSfLoading, setBreadcrumbSfLoading] = useState(false);
+  const [breadcrumbSfError, setBreadcrumbSfError] = useState(false);
   const [moveEvalDiffs, setMoveEvalDiffs] = useState<Record<string, MoveEvalDiffEntry>>({});
 
   const replay = useMemo(() => replayMoves(loc.via), [loc.via]);
+  const breadcrumbPreviewReplay = useMemo((): ReplayResult | null => {
+    if (breadcrumbPreviewPly == null) return null;
+    const previewVia = breadcrumbPreviewPly < 0 ? [] : loc.via.slice(0, breadcrumbPreviewPly + 1);
+    const r = replayMoves(previewVia);
+    return r.error ? null : r;
+  }, [breadcrumbPreviewPly, loc.via]);
+  const displaySideToMove =
+    bookmarkPreview?.sideToMove ?? breadcrumbPreviewReplay?.sideToMove ?? replay.sideToMove;
 
   const hoverPreview = useMemo(() => {
     if (!previewSan || replay.error) return null;
@@ -184,6 +201,10 @@ export function OpeningTracker({
 
   useEffect(() => {
     setPreviewSan(null);
+  }, [loc.via]);
+
+  useEffect(() => {
+    setBreadcrumbPreviewPly(null);
   }, [loc.via]);
 
   useEffect(() => {
@@ -319,6 +340,120 @@ export function OpeningTracker({
       ac.abort();
     };
   }, [hoverReplay?.posHash, hoverReplay?.fen]);
+
+  useEffect(() => {
+    if (!bookmarkPreview) {
+      setBookmarkSfEval(null);
+      setBookmarkSfLoading(false);
+      setBookmarkSfError(false);
+      return;
+    }
+
+    const ac = new AbortController();
+    let cancelled = false;
+
+    setBookmarkSfEval(null);
+    setBookmarkSfError(false);
+    setBookmarkSfLoading(true);
+
+    (async () => {
+      const cached = await getStockfishEval(bookmarkPreview.posHash);
+      if (cancelled) return;
+      if (cached) {
+        setBookmarkSfEval({
+          kind: cached.kind,
+          cp: cached.cp,
+          mate: cached.mate,
+          depth: cached.depth,
+        });
+        setBookmarkSfLoading(false);
+        return;
+      }
+
+      try {
+        const result = await analyzePosition(bookmarkPreview.fen, ac.signal);
+        if (cancelled) return;
+        await upsertStockfishEval({
+          fen_hash: bookmarkPreview.posHash,
+          kind: result.kind,
+          cp: result.cp,
+          mate: result.mate,
+          depth: result.depth,
+          evaluated_at: Date.now(),
+        });
+        setBookmarkSfEval(result);
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setBookmarkSfError(true);
+        setBookmarkSfEval(null);
+      } finally {
+        if (!cancelled) setBookmarkSfLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [bookmarkPreview?.posHash, bookmarkPreview?.fen]);
+
+  useEffect(() => {
+    if (!breadcrumbPreviewReplay) {
+      setBreadcrumbSfEval(null);
+      setBreadcrumbSfLoading(false);
+      setBreadcrumbSfError(false);
+      return;
+    }
+
+    const ac = new AbortController();
+    let cancelled = false;
+
+    setBreadcrumbSfEval(null);
+    setBreadcrumbSfError(false);
+    setBreadcrumbSfLoading(true);
+
+    (async () => {
+      const cached = await getStockfishEval(breadcrumbPreviewReplay.posHash);
+      if (cancelled) return;
+      if (cached) {
+        setBreadcrumbSfEval({
+          kind: cached.kind,
+          cp: cached.cp,
+          mate: cached.mate,
+          depth: cached.depth,
+        });
+        setBreadcrumbSfLoading(false);
+        return;
+      }
+
+      try {
+        const result = await analyzePosition(breadcrumbPreviewReplay.fen, ac.signal);
+        if (cancelled) return;
+        await upsertStockfishEval({
+          fen_hash: breadcrumbPreviewReplay.posHash,
+          kind: result.kind,
+          cp: result.cp,
+          mate: result.mate,
+          depth: result.depth,
+          evaluated_at: Date.now(),
+        });
+        setBreadcrumbSfEval(result);
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        setBreadcrumbSfError(true);
+        setBreadcrumbSfEval(null);
+      } finally {
+        if (!cancelled) setBreadcrumbSfLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [breadcrumbPreviewReplay?.posHash, breadcrumbPreviewReplay?.fen]);
 
   const eloMin = eloRange[0];
   const eloMax = eloRange[1];
@@ -482,10 +617,14 @@ export function OpeningTracker({
         <span class="explorer-version">v{pkg.version}</span>
       </div>
 
-      <div class="explorer-breadcrumbs">
+      <div
+        class="explorer-breadcrumbs"
+        onMouseLeave={() => setBreadcrumbPreviewPly(null)}
+      >
         <button
-          class={`breadcrumb ${loc.via.length === 0 ? "breadcrumb--active" : ""}`}
+          class={`breadcrumb ${loc.via.length === 0 ? "breadcrumb--active" : ""} ${breadcrumbPreviewPly === -1 ? "moves-row--preview" : ""}`}
           onClick={() => handleBreadcrumbClick(-1)}
+          onMouseEnter={() => setBreadcrumbPreviewPly(-1)}
         >
           Start
         </button>
@@ -493,8 +632,9 @@ export function OpeningTracker({
           <span key={i}>
             <span class="breadcrumb-sep">{"\u203A"}</span>
             <button
-              class={`breadcrumb ${i === loc.via.length - 1 ? "breadcrumb--active" : ""}`}
+              class={`breadcrumb ${i === loc.via.length - 1 ? "breadcrumb--active" : ""} ${breadcrumbPreviewPly === i ? "moves-row--preview" : ""}`}
               onClick={() => handleBreadcrumbClick(i)}
+              onMouseEnter={() => setBreadcrumbPreviewPly(i)}
             >
               {formatBreadcrumbLabel(san, i)}
             </button>
@@ -521,10 +661,10 @@ export function OpeningTracker({
 
           <span class="side-badge">
             <span
-              class={`turn-dot ${replay.sideToMove === "w" ? "turn-dot--white" : "turn-dot--black"}`}
+              class={`turn-dot ${displaySideToMove === "w" ? "turn-dot--white" : "turn-dot--black"}`}
               aria-hidden
             />
-            {replay.sideToMove === "w" ? "White" : "Black"} to move
+            {displaySideToMove === "w" ? "White" : "Black"} to move
           </span>
         </div>
         <div class="explorer-header-right">
@@ -586,16 +726,40 @@ export function OpeningTracker({
       <div class="explorer-body">
         <div class="board-column">
           <EvalBar
-            evalData={hoverReplay ? hoverSfEval : sfEval}
-            loading={hoverReplay ? hoverSfLoading : sfLoading}
-            error={hoverReplay ? hoverSfError : sfError}
+            evalData={
+              bookmarkPreview
+                ? bookmarkSfEval
+                : breadcrumbPreviewReplay
+                  ? breadcrumbSfEval
+                  : hoverReplay
+                    ? hoverSfEval
+                    : sfEval
+            }
+            loading={
+              bookmarkPreview
+                ? bookmarkSfLoading
+                : breadcrumbPreviewReplay
+                  ? breadcrumbSfLoading
+                  : hoverReplay
+                    ? hoverSfLoading
+                    : sfLoading
+            }
+            error={
+              bookmarkPreview
+                ? bookmarkSfError
+                : breadcrumbPreviewReplay
+                  ? breadcrumbSfError
+                  : hoverReplay
+                    ? hoverSfError
+                    : sfError
+            }
             perspective={colorFilter}
           />
           <ChessBoard
-            fen={hoverPreview?.fen ?? replay.fen}
+            fen={bookmarkPreview?.fen ?? breadcrumbPreviewReplay?.fen ?? hoverPreview?.fen ?? replay.fen}
             flipped={colorFilter === "b"}
-            highlightFrom={hoverPreview?.fromSq ?? null}
-            highlightTo={hoverPreview?.toSq ?? null}
+            highlightFrom={bookmarkPreview || breadcrumbPreviewReplay ? null : (hoverPreview?.fromSq ?? null)}
+            highlightTo={bookmarkPreview || breadcrumbPreviewReplay ? null : (hoverPreview?.toSq ?? null)}
           />
         </div>
 

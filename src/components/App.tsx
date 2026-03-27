@@ -59,6 +59,11 @@ export function App() {
   const [bootDone, setBootDone] = useState(false);
   const [disabledUsernames, setDisabledUsernames] = useState<Record<string, boolean>>({});
   const [bookmarksRevision, setBookmarksRevision] = useState(0);
+  const [bookmarkPreview, setBookmarkPreview] = useState<{
+    fen: string;
+    posHash: string;
+    sideToMove: "w" | "b";
+  } | null>(null);
 
   const dbReadyRef = useRef(false);
   const importBusyRef = useRef(false);
@@ -423,6 +428,7 @@ export function App() {
         includeUsernames={includeUsernames}
         bookmarksRevision={bookmarksRevision}
         onBookmarkToggle={bumpBookmarks}
+        bookmarkPreview={bookmarkPreview}
       />
       <BookmarkSidebar
         eloRange={eloRange}
@@ -430,6 +436,7 @@ export function App() {
         includeUsernames={includeUsernames}
         bookmarksRevision={bookmarksRevision}
         onBookmarksChanged={bumpBookmarks}
+        onPreviewChange={setBookmarkPreview}
       />
     </div>
   );

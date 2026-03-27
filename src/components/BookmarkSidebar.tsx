@@ -34,6 +34,9 @@ type CardModel = {
   colorLabel: string;
   totals: AggregatedMove;
   parseOk: boolean;
+  previewFen: string | null;
+  previewPosHash: string | null;
+  previewSideToMove: "w" | "b" | null;
 };
 
 type BookmarkSidebarProps = {
@@ -42,6 +45,7 @@ type BookmarkSidebarProps = {
   bookmarksRevision: number;
   includeUsernames?: string[];
   onBookmarksChanged: () => void;
+  onPreviewChange: (preview: { fen: string; posHash: string; sideToMove: "w" | "b" } | null) => void;
 };
 
 export function BookmarkSidebar({
@@ -50,6 +54,7 @@ export function BookmarkSidebar({
   bookmarksRevision,
   includeUsernames,
   onBookmarksChanged,
+  onPreviewChange,
 }: BookmarkSidebarProps) {
   const explorerLoc = useExplorerLocation();
   const replay = useMemo(() => replayMoves(explorerLoc.via), [explorerLoc.via]);
@@ -106,6 +111,9 @@ export function BookmarkSidebar({
             colorLabel: parsed.color === "b" ? "As black" : "As white",
             totals,
             parseOk,
+            previewFen: parseOk ? r.fen : null,
+            previewPosHash: parseOk ? parsed.posHash : null,
+            previewSideToMove: parseOk ? r.sideToMove : null,
           });
         }
 
@@ -125,6 +133,10 @@ export function BookmarkSidebar({
     eloRange[0],
     eloRange[1],
   ]);
+
+  useEffect(() => {
+    return () => onPreviewChange(null);
+  }, [onPreviewChange]);
 
   useEffect(() => {
     if (renamingFragment == null) return;
@@ -185,6 +197,18 @@ export function BookmarkSidebar({
             <li key={c.row.fragment}>
               <div
                 class={`bookmark-card ${c.row.fragment === currentFragment ? "bookmark-card--current" : ""}`}
+                onMouseEnter={() =>
+                  onPreviewChange(
+                    c.previewFen && c.previewPosHash && c.previewSideToMove
+                      ? {
+                          fen: c.previewFen,
+                          posHash: c.previewPosHash,
+                          sideToMove: c.previewSideToMove,
+                        }
+                      : null,
+                  )
+                }
+                onMouseLeave={() => onPreviewChange(null)}
               >
                 <div class="bookmark-card-maincol">
                   {renamingFragment === c.row.fragment ? (
