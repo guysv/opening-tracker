@@ -1,3 +1,5 @@
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+
 const PIECE_UNICODE: Record<string, string> = {
   K: "\u265A", Q: "\u265B", R: "\u265C", B: "\u265D", N: "\u265E", P: "\u265F",
   k: "\u265A", q: "\u265B", r: "\u265C", b: "\u265D", n: "\u265E", p: "\u265F",
@@ -6,6 +8,8 @@ const PIECE_UNICODE: Record<string, string> = {
 const WHITE_PIECES = new Set(["K", "Q", "R", "B", "N", "P"]);
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
+const SQUARE_SIZE = 52;
+const MOVE_PREVIEW_ANIM_MS = 280;
 
 function parsePlacement(fen: string): (string | null)[][] {
   const placement = fen.split(" ")[0] ?? "";
@@ -35,6 +39,13 @@ type ChessBoardProps = {
   highlightTo?: string | null;
 };
 
+type MoveAnimation = {
+  id: number;
+  piece: string;
+  from: { r: number; f: number };
+  to: { r: number; f: number };
+};
+
 function parseAlgebraicSquare(sq: string): { r: number; f: number } | null {
   if (sq.length < 2) return null;
   const file = sq.charCodeAt(0) - 97;
@@ -45,8 +56,60 @@ function parseAlgebraicSquare(sq: string): { r: number; f: number } | null {
 
 export function ChessBoard({ fen, flipped = false, highlightFrom = null, highlightTo = null }: ChessBoardProps) {
   const rows = parsePlacement(fen);
-  const fromCoords = highlightFrom ? parseAlgebraicSquare(highlightFrom) : null;
-  const toCoords = highlightTo ? parseAlgebraicSquare(highlightTo) : null;
+  const fromCoords = useMemo(() => (highlightFrom ? parseAlgebraicSquare(highlightFrom) : null), [highlightFrom]);
+  const toCoords = useMemo(() => (highlightTo ? parseAlgebraicSquare(highlightTo) : null), [highlightTo]);
+  const [moveAnim, setMoveAnim] = useState<MoveAnimation | null>(null);
+  const animTimerRef = useRef<number | null>(null);
+  const lastAnimIdRef = useRef(0);
+  const prevFenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (animTimerRef.current !== null) {
+      window.clearTimeout(animTimerRef.current);
+      animTimerRef.current = null;
+    }
+    return () => {
+      if (animTimerRef.current !== null) {
+        window.clearTimeout(animTimerRef.current);
+        animTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const prevFen = prevFenRef.current;
+    prevFenRef.current = fen;
+    if (!prevFen || prevFen === fen || !fromCoords || !toCoords) {
+      setMoveAnim(null);
+      return;
+    }
+
+    const movedPiece = rows[toCoords.r]?.[toCoords.f] ?? null;
+    if (!movedPiece) {
+      setMoveAnim(null);
+      return;
+    }
+
+    lastAnimIdRef.current += 1;
+    const nextAnim: MoveAnimation = { id: lastAnimIdRef.current, piece: movedPiece, from: fromCoords, to: toCoords };
+    setMoveAnim(nextAnim);
+    animTimerRef.current = window.setTimeout(() => {
+      setMoveAnim((current) => (current?.id === nextAnim.id ? null : current));
+      animTimerRef.current = null;
+    }, MOVE_PREVIEW_ANIM_MS);
+  }, [fen, fromCoords, toCoords]);
+
+  const moveAnimVector = useMemo(() => {
+    if (!moveAnim) return null;
+    const fromDisplayR = flipped ? 7 - moveAnim.from.r : moveAnim.from.r;
+    const fromDisplayF = flipped ? 7 - moveAnim.from.f : moveAnim.from.f;
+    const toDisplayR = flipped ? 7 - moveAnim.to.r : moveAnim.to.r;
+    const toDisplayF = flipped ? 7 - moveAnim.to.f : moveAnim.to.f;
+    return {
+      dx: (toDisplayF - fromDisplayF) * SQUARE_SIZE,
+      dy: (toDisplayR - fromDisplayR) * SQUARE_SIZE,
+    };
+  }, [flipped, moveAnim]);
 
   const rankOrder = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
   const fileOrder = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
@@ -64,6 +127,8 @@ export function ChessBoard({ fen, flipped = false, highlightFrom = null, highlig
               const isLight = (r + f) % 2 === 0;
               const hlFrom = fromCoords && fromCoords.r === r && fromCoords.f === f;
               const hlTo = toCoords && toCoords.r === r && toCoords.f === f;
+              const hideDestinationPiece = !!(moveAnim && moveAnim.to.r === r && moveAnim.to.f === f);
+              const renderMovingPiece = !!(moveAnimVector && moveAnim && moveAnim.from.r === r && moveAnim.from.f === f);
               return (
                 <div
                   class={[
@@ -74,9 +139,21 @@ export function ChessBoard({ fen, flipped = false, highlightFrom = null, highlig
                   ].filter(Boolean).join(" ")}
                   key={f}
                 >
-                  {piece ? (
+                  {piece && !hideDestinationPiece ? (
                     <span class={`board-piece ${WHITE_PIECES.has(piece) ? "board-piece--white" : "board-piece--black"}`}>
                       {PIECE_UNICODE[piece]}
+                    </span>
+                  ) : null}
+                  {renderMovingPiece ? (
+                    <span
+                      class={`board-piece board-piece--moving ${WHITE_PIECES.has(moveAnim.piece) ? "board-piece--white" : "board-piece--black"}`}
+                      style={{
+                        "--move-dx": `${moveAnimVector.dx}px`,
+                        "--move-dy": `${moveAnimVector.dy}px`,
+                        "--move-ms": `${MOVE_PREVIEW_ANIM_MS}ms`,
+                      }}
+                    >
+                      {PIECE_UNICODE[moveAnim.piece]}
                     </span>
                   ) : null}
                 </div>

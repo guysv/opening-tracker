@@ -1218,6 +1218,7 @@ button:hover {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
 }
 
 .board-sq--light {
@@ -1232,6 +1233,23 @@ button:hover {
   font-size: 3rem;
   line-height: 1;
   user-select: none;
+}
+
+.board-piece--moving {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  animation: board-piece-slide var(--move-ms, 280ms) cubic-bezier(0.42, 0, 0.58, 1) forwards;
+  will-change: transform;
+}
+
+@keyframes board-piece-slide {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(var(--move-dx, 0), var(--move-dy, 0));
+  }
 }
 
 .board-piece--white {
