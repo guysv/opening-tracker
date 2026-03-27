@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import type { PlayerListRow } from "../lib/dbClient";
+import type { QueuedImport } from "../lib/importQueue";
 import { ImportStatusPanel, type ImportActivitySnapshot } from "./ImportStatusPanel";
 import { StorageEstimatePanel } from "./StorageEstimatePanel";
 import type { StoragePanelState } from "./useStorageDbState";
 
 type SidebarProps = {
   importActivity: ImportActivitySnapshot | null;
+  /** FIFO jobs waiting while another import runs (shown as preview cards) */
+  importQueue: QueuedImport[];
   status: string;
   players: PlayerListRow[];
   disabledUsernames: Record<string, boolean>;
@@ -44,8 +47,23 @@ function formatLastSync(ms: number | null): string {
   }
 }
 
+function queuedImportSummary(job: QueuedImport): string {
+  if (job.kind === "initial") {
+    return `Import · ${job.monthsBack} month${job.monthsBack === 1 ? "" : "s"} back`;
+  }
+  if (job.kind === "sync") {
+    return "Sync new archives";
+  }
+  return `Extend · ${job.extendMonths} month${job.extendMonths === 1 ? "" : "s"} older`;
+}
+
+function queuedImportUsername(job: QueuedImport): string {
+  return job.kind === "initial" ? job.username : job.player.username;
+}
+
 export function Sidebar({
   importActivity,
+  importQueue,
   status,
   players,
   disabledUsernames,
@@ -125,19 +143,28 @@ export function Sidebar({
     onExtend(player, n);
   }
 
+  const importForNewPlayer =
+    importActivity != null &&
+    !players.some((p) => p.username === importActivity.username);
+
   return (
     <aside class="sidebar">
       <div class="player-cards-scroll">
         {!inUse &&
           players.map((p) => {
             const disabled = Boolean(disabledUsernames[p.username]);
+            const importHere = importActivity?.username === p.username;
             return (
               <div
                 key={p.username}
                 class={
                   disabled
-                    ? "player-card player-card--disabled"
-                    : "player-card player-card--enabled"
+                    ? importHere
+                      ? "player-card player-card--disabled player-card--import-active"
+                      : "player-card player-card--disabled"
+                    : importHere
+                      ? "player-card player-card--enabled player-card--import-active"
+                      : "player-card player-card--enabled"
                 }
                 onClick={() => onTogglePlayer(p.username)}
                 role="button"
@@ -161,6 +188,21 @@ export function Sidebar({
                 <div class="player-card-sync">
                   Last sync: {formatLastSync(p.lastSyncAt)}
                 </div>
+
+                {importHere && importActivity ? (
+                  <div
+                    class="player-card-import-status"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    <ImportStatusPanel
+                      activity={importActivity}
+                      embedded
+                      compactTitle
+                    />
+                  </div>
+                ) : null}
 
                 <div
                   class="player-card-actions"
@@ -240,6 +282,41 @@ export function Sidebar({
               </div>
             );
           })}
+
+        {!inUse && importForNewPlayer && importActivity ? (
+          <div
+            class="player-card player-card--import-pending"
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+            role="status"
+          >
+            <ImportStatusPanel activity={importActivity} embedded />
+          </div>
+        ) : null}
+
+        {!inUse &&
+          importQueue.map((job, i) => (
+            <div
+              key={`q-${i}-${job.kind}-${queuedImportUsername(job)}`}
+              class="player-card player-card--queued"
+              role="status"
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              <div class="player-card-top">
+                <span class="player-card-name">{queuedImportUsername(job)}</span>
+                <span class="player-card-queued-badge">Queued</span>
+              </div>
+              <div class="player-card-meta player-card-meta--queued">
+                {queuedImportSummary(job)}
+              </div>
+              <div class="player-card-queue-position">
+                {i === 0 ? "Next in queue" : `After ${i} job${i === 1 ? "" : "s"}`}
+              </div>
+            </div>
+          ))}
 
         <div
           class={addPlayerOpen ? "add-player-card add-player-card--open" : "add-player-card"}
@@ -334,8 +411,6 @@ export function Sidebar({
       >
         Clear Database
       </button>
-
-      {importActivity ? <ImportStatusPanel activity={importActivity} /> : null}
 
       <p class="sidebar-status">{status}</p>
 

@@ -497,6 +497,55 @@ body {
   opacity: 0.9;
 }
 
+.player-card--import-active {
+  border-color: rgba(59, 130, 246, 0.42);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+}
+
+.player-card--import-pending {
+  cursor: default;
+  background: rgba(59, 130, 246, 0.06);
+  border-color: rgba(59, 130, 246, 0.38);
+}
+
+.player-card--queued {
+  cursor: default;
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.18);
+  opacity: 0.95;
+}
+
+.player-card-queued-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.player-card-meta--queued {
+  margin-top: 0.2rem;
+}
+
+.player-card-queue-position {
+  margin-top: 0.4rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+.player-card-import-status {
+  margin-top: 0.45rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .player-card-actions {
   margin-top: 0.55rem;
   padding-top: 0.55rem;
@@ -621,6 +670,26 @@ button:hover {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+}
+
+.import-status-widget--embedded {
+  padding: 0;
+  border: none;
+  gap: 0.4rem;
+}
+
+.import-status-widget--embedded .import-status-widget-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.import-status-widget--embedded .import-status-widget-row {
+  font-size: 0.68rem;
+}
+
+.import-status-widget--embedded .import-status-widget-mono {
+  font-size: 0.7rem;
 }
 
 .import-status-widget-title {

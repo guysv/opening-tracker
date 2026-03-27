@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 
 export type ImportActivitySnapshot = {
   username: string;
+  op: "initial" | "sync" | "extend";
   downloadCurrent: number;
   downloadTotal: number;
   parseCurrent: number | null;
@@ -13,7 +14,26 @@ export type ImportActivitySnapshot = {
 
 type ImportStatusPanelProps = {
   activity: ImportActivitySnapshot;
+  /** Shown inside a player card; tighter layout, title omits username when `compactTitle`. */
+  embedded?: boolean;
+  /** With `embedded`, use a short title (username is already in the card header). */
+  compactTitle?: boolean;
 };
+
+function activityTitle(
+  op: ImportActivitySnapshot["op"],
+  username: string,
+  compact: boolean,
+): string {
+  if (compact) {
+    if (op === "initial") return "Importing";
+    if (op === "sync") return "Syncing";
+    return "Extending";
+  }
+  if (op === "initial") return `Importing ${username}`;
+  if (op === "sync") return `Syncing ${username}`;
+  return `Extending ${username}`;
+}
 
 function formatElapsedMs(ms: number): string {
   if (ms < 60_000) {
@@ -52,9 +72,14 @@ function SavingElapsedLabel({ saving, savingStartedAt }: SavingElapsedProps) {
   );
 }
 
-export function ImportStatusPanel({ activity }: ImportStatusPanelProps) {
+export function ImportStatusPanel({
+  activity,
+  embedded = false,
+  compactTitle = false,
+}: ImportStatusPanelProps) {
   const {
     username,
+    op,
     downloadCurrent,
     downloadTotal,
     parseCurrent,
@@ -77,8 +102,17 @@ export function ImportStatusPanel({ activity }: ImportStatusPanelProps) {
       : `${parseCurrent ?? 0}/${parseTotal}`;
 
   return (
-    <div class="import-status-widget" aria-live="polite">
-      <div class="import-status-widget-title">Import: {username}</div>
+    <div
+      class={
+        embedded
+          ? "import-status-widget import-status-widget--embedded"
+          : "import-status-widget"
+      }
+      aria-live="polite"
+    >
+      <div class="import-status-widget-title">
+        {activityTitle(op, username, embedded && compactTitle)}
+      </div>
       <ul class="import-status-widget-list">
         <li
           class={

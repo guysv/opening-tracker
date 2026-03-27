@@ -23,6 +23,7 @@ import {
   type DateRangeSec,
   type EloRange,
 } from "../lib/explorerData";
+import type { QueuedImport } from "../lib/importQueue";
 import type { ImportActivitySnapshot } from "./ImportStatusPanel";
 import { BookmarkSidebar } from "./BookmarkSidebar";
 import { OpeningTracker } from "./OpeningTracker";
@@ -60,6 +61,7 @@ function opLabel(op: "initial" | "sync" | "extend"): string {
 export function App() {
   const [status, setStatus] = useState("Initializing database...");
   const [importActivity, setImportActivity] = useState<ImportActivitySnapshot | null>(null);
+  const [importQueue, setImportQueue] = useState<QueuedImport[]>([]);
   const [eloRange, setEloRange] = useState<EloRange>(DEFAULT_ELO_RANGE);
   const [dateBoundsSec, setDateBoundsSec] = useState<DateRangeSec | null>(null);
   const [dateRangeSec, setDateRangeSec] = useState<DateRangeSec | null>(null);
@@ -79,6 +81,8 @@ export function App() {
   const dbReadyRef = useRef(false);
   const importBusyRef = useRef(false);
   const importUsernameRef = useRef("");
+  const importOpRef = useRef<ImportActivitySnapshot["op"]>("initial");
+  const tryStartNextImportRef = useRef<() => void>(() => {});
 
   const worker = useMemo(
     () =>
@@ -170,10 +174,12 @@ export function App() {
               part = "nothing to save";
             }
             setStatus(`${username}: ${opLabel(op)} complete (${part}).`);
+            tryStartNextImportRef.current();
           } catch (e) {
             setImportActivity(null);
             importBusyRef.current = false;
             setStatus(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
+            tryStartNextImportRef.current();
           }
         };
 
@@ -185,6 +191,7 @@ export function App() {
         setImportActivity(null);
         importBusyRef.current = false;
         setStatus(`Import failed: ${message.payload.message}`);
+        tryStartNextImportRef.current();
         return;
       }
 
@@ -193,6 +200,7 @@ export function App() {
         setImportActivity((prev) => {
           const base: ImportActivitySnapshot = prev ?? {
             username: importUsernameRef.current,
+            op: importOpRef.current,
             downloadCurrent: 0,
             downloadTotal: 0,
             parseCurrent: null,
@@ -265,10 +273,16 @@ export function App() {
     };
   }, []);
 
-  function startImportActivity(username: string, downloadTotal: number) {
+  function startImportActivity(
+    username: string,
+    downloadTotal: number,
+    op: ImportActivitySnapshot["op"],
+  ) {
     importUsernameRef.current = username;
+    importOpRef.current = op;
     setImportActivity({
       username,
+      op,
       downloadCurrent: 0,
       downloadTotal,
       parseCurrent: null,
@@ -278,83 +292,83 @@ export function App() {
     });
   }
 
-  function handleImportInitial(username: string, monthsBack: number) {
-    if (!dbReadyRef.current) {
-      setStatus("Database is not ready yet. Please wait.");
-      return;
+  function queuedImportStatusLine(job: QueuedImport, queueLength: number): string {
+    const tail =
+      queueLength === 1
+        ? "1 job in queue — runs when the current import finishes."
+        : `${queueLength} jobs in queue — FIFO after the current import.`;
+    if (job.kind === "initial") {
+      return `Queued: import ${job.username} (${job.monthsBack} mo). ${tail}`;
     }
-    if (importBusyRef.current) {
-      setStatus("Another import is already running.");
-      return;
+    if (job.kind === "sync") {
+      return `Queued: sync ${job.player.username}. ${tail}`;
     }
-
-    const normalizedUsername = username.trim().toLowerCase();
-    if (!normalizedUsername) {
-      setStatus("Please enter a valid chess.com username.");
-      return;
-    }
-
-    const months =
-      Number.isFinite(monthsBack) && monthsBack >= 1 ? Math.min(120, Math.floor(monthsBack)) : 1;
-
-    importBusyRef.current = true;
-    startImportActivity(normalizedUsername, months);
-    setStatus(`Importing ${months} month${months === 1 ? "" : "s"} for ${normalizedUsername}...`);
-    void getArchivesLastModifiedForUser(normalizedUsername)
-      .then((archiveLastModifiedByPath) => {
-        worker.postMessage({
-          type: "IMPORT_INITIAL",
-          payload: { username: normalizedUsername, monthsBack: months, archiveLastModifiedByPath },
-        });
-      })
-      .catch((e) => {
-        importBusyRef.current = false;
-        setImportActivity(null);
-        setStatus(`Failed to read archive metadata: ${e instanceof Error ? e.message : String(e)}`);
-      });
+    return `Queued: extend ${job.player.username} (${job.extendMonths} mo). ${tail}`;
   }
 
-  function handleSync(player: PlayerListRow) {
-    if (!dbReadyRef.current || importBusyRef.current) {
-      if (importBusyRef.current) setStatus("Another import is already running.");
-      return;
-    }
+  function executeImportJob(job: QueuedImport) {
     importBusyRef.current = true;
-    const total = syncMonthsToFetch(player.lastSyncAt, player.maxArchivePath);
-    startImportActivity(player.username, total);
-    setStatus(`Syncing ${player.username}...`);
-    void getArchivesLastModifiedForUser(player.username)
-      .then((archiveLastModifiedByPath) => {
-        worker.postMessage({
-          type: "IMPORT_SYNC",
-          payload: {
-            username: player.username,
-            lastSyncAt: player.lastSyncAt,
-            maxArchivePath: player.maxArchivePath,
-            archiveLastModifiedByPath,
-          },
+    if (job.kind === "initial") {
+      const { username, monthsBack } = job;
+      startImportActivity(username, monthsBack, "initial");
+      setStatus(
+        `Importing ${monthsBack} month${monthsBack === 1 ? "" : "s"} for ${username}...`,
+      );
+      void getArchivesLastModifiedForUser(username)
+        .then((archiveLastModifiedByPath) => {
+          worker.postMessage({
+            type: "IMPORT_INITIAL",
+            payload: { username, monthsBack, archiveLastModifiedByPath },
+          });
+        })
+        .catch((e) => {
+          importBusyRef.current = false;
+          setImportActivity(null);
+          setStatus(
+            `Failed to read archive metadata: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          tryStartNextImportRef.current();
         });
-      })
-      .catch((e) => {
-        importBusyRef.current = false;
-        setImportActivity(null);
-        setStatus(`Failed to read archive metadata: ${e instanceof Error ? e.message : String(e)}`);
-      });
-  }
-
-  function handleExtend(player: PlayerListRow, extendMonths: number) {
-    if (!dbReadyRef.current || importBusyRef.current) {
-      if (importBusyRef.current) setStatus("Another import is already running.");
       return;
     }
+    if (job.kind === "sync") {
+      const { player } = job;
+      const total = syncMonthsToFetch(player.lastSyncAt, player.maxArchivePath);
+      startImportActivity(player.username, total, "sync");
+      setStatus(`Syncing ${player.username}...`);
+      void getArchivesLastModifiedForUser(player.username)
+        .then((archiveLastModifiedByPath) => {
+          worker.postMessage({
+            type: "IMPORT_SYNC",
+            payload: {
+              username: player.username,
+              lastSyncAt: player.lastSyncAt,
+              maxArchivePath: player.maxArchivePath,
+              archiveLastModifiedByPath,
+            },
+          });
+        })
+        .catch((e) => {
+          importBusyRef.current = false;
+          setImportActivity(null);
+          setStatus(
+            `Failed to read archive metadata: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          tryStartNextImportRef.current();
+        });
+      return;
+    }
+    const { player, extendMonths } = job;
     const oldest = player.minArchivePath ?? player.minGameEndMonth;
     if (!oldest) {
+      importBusyRef.current = false;
+      setImportActivity(null);
       setStatus(`No archive or game date to extend from for ${player.username}.`);
+      tryStartNextImportRef.current();
       return;
     }
     const em = Math.min(120, Math.max(1, Math.floor(extendMonths)));
-    importBusyRef.current = true;
-    startImportActivity(player.username, em);
+    startImportActivity(player.username, em, "extend");
     setStatus(`Extending history for ${player.username}...`);
     void getArchivesLastModifiedForUser(player.username)
       .then((archiveLastModifiedByPath) => {
@@ -371,8 +385,70 @@ export function App() {
       .catch((e) => {
         importBusyRef.current = false;
         setImportActivity(null);
-        setStatus(`Failed to read archive metadata: ${e instanceof Error ? e.message : String(e)}`);
+        setStatus(
+          `Failed to read archive metadata: ${e instanceof Error ? e.message : String(e)}`,
+        );
+        tryStartNextImportRef.current();
       });
+  }
+
+  function tryStartNextImport() {
+    setImportQueue((q) => {
+      const [next, ...rest] = q;
+      if (next) {
+        queueMicrotask(() => executeImportJob(next));
+      }
+      return rest;
+    });
+  }
+
+  tryStartNextImportRef.current = tryStartNextImport;
+
+  function enqueueOrRun(job: QueuedImport) {
+    if (importBusyRef.current) {
+      setImportQueue((q) => {
+        const next = [...q, job];
+        const len = next.length;
+        queueMicrotask(() => setStatus(queuedImportStatusLine(job, len)));
+        return next;
+      });
+      return;
+    }
+    executeImportJob(job);
+  }
+
+  function handleImportInitial(username: string, monthsBack: number) {
+    if (!dbReadyRef.current) {
+      setStatus("Database is not ready yet. Please wait.");
+      return;
+    }
+
+    const normalizedUsername = username.trim().toLowerCase();
+    if (!normalizedUsername) {
+      setStatus("Please enter a valid chess.com username.");
+      return;
+    }
+
+    const months =
+      Number.isFinite(monthsBack) && monthsBack >= 1 ? Math.min(120, Math.floor(monthsBack)) : 1;
+
+    enqueueOrRun({ kind: "initial", username: normalizedUsername, monthsBack: months });
+  }
+
+  function handleSync(player: PlayerListRow) {
+    if (!dbReadyRef.current) return;
+    enqueueOrRun({ kind: "sync", player });
+  }
+
+  function handleExtend(player: PlayerListRow, extendMonths: number) {
+    if (!dbReadyRef.current) return;
+    const oldest = player.minArchivePath ?? player.minGameEndMonth;
+    if (!oldest) {
+      setStatus(`No archive or game date to extend from for ${player.username}.`);
+      return;
+    }
+    const em = Math.min(120, Math.max(1, Math.floor(extendMonths)));
+    enqueueOrRun({ kind: "extend", player, extendMonths: em });
   }
 
   async function handleDeletePlayer(username: string) {
@@ -476,6 +552,7 @@ export function App() {
     <div class="layout">
       <Sidebar
         importActivity={importActivity}
+        importQueue={importQueue}
         status={status}
         players={players}
         disabledUsernames={disabledUsernames}
