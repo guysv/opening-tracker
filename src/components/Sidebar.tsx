@@ -5,6 +5,7 @@ import type { EloRange } from "../lib/explorerData";
 import { EloRangeSlider } from "./EloRangeSlider";
 import { ImportStatusPanel, type ImportActivitySnapshot } from "./ImportStatusPanel";
 import { StorageEstimatePanel } from "./StorageEstimatePanel";
+import type { StoragePanelState } from "./useStorageDbState";
 
 type SidebarProps = {
   importActivity: ImportActivitySnapshot | null;
@@ -19,6 +20,13 @@ type SidebarProps = {
   onDeletePlayer: (username: string) => void;
   onTogglePlayer: (username: string) => void;
   onClear: () => void;
+  storageState: StoragePanelState;
+  downloading: boolean;
+  acquiring: boolean;
+  onAcquireStorage: () => void;
+  onDownloadStorage: () => void;
+  inUse: boolean;
+  canDownload: boolean;
 };
 
 function formatArchiveSpan(minPath: string | null, maxPath: string | null): string {
@@ -53,6 +61,13 @@ export function Sidebar({
   onDeletePlayer,
   onTogglePlayer,
   onClear,
+  storageState,
+  downloading,
+  acquiring,
+  onAcquireStorage,
+  onDownloadStorage,
+  inUse,
+  canDownload,
 }: SidebarProps) {
   const [addPlayerOpen, setAddPlayerOpen] = useState(false);
   const [addUsername, setAddUsername] = useState("");
@@ -119,128 +134,150 @@ export function Sidebar({
   return (
     <aside class="sidebar">
       <div class="player-cards-scroll">
-        {players.map((p) => {
-          const disabled = Boolean(disabledUsernames[p.username]);
-          return (
-            <div
-              key={p.username}
-              class={
-                disabled
-                  ? "player-card player-card--disabled"
-                  : "player-card player-card--enabled"
-              }
-              onClick={() => onTogglePlayer(p.username)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onTogglePlayer(p.username);
-                }
-              }}
-            >
-              <div class="player-card-top">
-                <span class="player-card-name">{p.username}</span>
-                <span class="player-card-gamecount">
-                  {p.gameCount} game{p.gameCount === 1 ? "" : "s"}
-                </span>
-              </div>
-              <div class="player-card-meta">
-                <span>{formatArchiveSpan(p.minArchivePath, p.maxArchivePath)}</span>
-              </div>
-              <div class="player-card-sync">Last sync: {formatLastSync(p.lastSyncAt)}</div>
-
+        {!inUse &&
+          players.map((p) => {
+            const disabled = Boolean(disabledUsernames[p.username]);
+            return (
               <div
-                class="player-card-actions"
-                onClick={(e) => {
-                  e.stopPropagation();
+                key={p.username}
+                class={
+                  disabled
+                    ? "player-card player-card--disabled"
+                    : "player-card player-card--enabled"
+                }
+                onClick={() => onTogglePlayer(p.username)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onTogglePlayer(p.username);
+                  }
                 }}
               >
-                <div class="player-card-buttons">
-                  {extendOpenFor === p.username ? (
-                    <div class="player-card-extend-inline">
-                      <input
-                        ref={extendInputRef}
-                        class="player-card-extend-input"
-                        type="number"
-                        min={1}
-                        max={120}
-                        value={extendMonthsDraft}
-                        onInput={(e) =>
-                          setExtendMonthsDraft((e.currentTarget as HTMLInputElement).value)
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") {
-                            e.preventDefault();
-                            closeExtendMode();
+                <div class="player-card-top">
+                  <span class="player-card-name">{p.username}</span>
+                  <span class="player-card-gamecount">
+                    {p.gameCount} game{p.gameCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div class="player-card-meta">
+                  <span>{formatArchiveSpan(p.minArchivePath, p.maxArchivePath)}</span>
+                </div>
+                <div class="player-card-sync">
+                  Last sync: {formatLastSync(p.lastSyncAt)}
+                </div>
+
+                <div
+                  class="player-card-actions"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  <div class="player-card-buttons">
+                    {extendOpenFor === p.username ? (
+                      <div class="player-card-extend-inline">
+                        <input
+                          ref={extendInputRef}
+                          class="player-card-extend-input"
+                          type="number"
+                          min={1}
+                          max={120}
+                          value={extendMonthsDraft}
+                          onInput={(e) =>
+                            setExtendMonthsDraft(
+                              (e.currentTarget as HTMLInputElement).value
+                            )
                           }
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            confirmExtend(p);
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        class="player-card-btn player-card-btn--secondary player-card-btn--inline"
-                        onClick={() => confirmExtend(p)}
-                      >
-                        Go
-                      </button>
-                      <button
-                        type="button"
-                        class="player-card-btn player-card-btn--secondary player-card-btn--inline"
-                        aria-label="Cancel extend"
-                        onClick={closeExtendMode}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        class="player-card-btn player-card-btn--secondary"
-                        onClick={() => onSync(p)}
-                      >
-                        Sync
-                      </button>
-                    <button
-                      type="button"
-                      class="player-card-btn player-card-btn--secondary"
-                      onClick={() => openExtendMode(p.username)}
-                    >
-                      Extend
-                    </button>
-                      <button
-                        type="button"
-                        class="player-card-btn player-card-btn--danger"
-                        onClick={() => onDeletePlayer(p.username)}
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              closeExtendMode();
+                            }
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              confirmExtend(p);
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          class="player-card-btn player-card-btn--secondary player-card-btn--inline"
+                          onClick={() => confirmExtend(p)}
+                        >
+                          Go
+                        </button>
+                        <button
+                          type="button"
+                          class="player-card-btn player-card-btn--secondary player-card-btn--inline"
+                          aria-label="Cancel extend"
+                          onClick={closeExtendMode}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          class="player-card-btn player-card-btn--secondary"
+                          onClick={() => onSync(p)}
+                        >
+                          Sync
+                        </button>
+                        <button
+                          type="button"
+                          class="player-card-btn player-card-btn--secondary"
+                          onClick={() => openExtendMode(p.username)}
+                        >
+                          Extend
+                        </button>
+                        <button
+                          type="button"
+                          class="player-card-btn player-card-btn--danger"
+                          onClick={() => onDeletePlayer(p.username)}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
         <div
           class={addPlayerOpen ? "add-player-card add-player-card--open" : "add-player-card"}
         >
           {!addPlayerOpen ? (
-            <button
-              type="button"
-              class="add-player-card-trigger"
-              aria-label="Add player"
-              onClick={() => setAddPlayerOpen(true)}
-            >
-              <span class="add-player-card-plus" aria-hidden>
-                +
-              </span>
-            </button>
+            inUse ? (
+              <button
+                type="button"
+                class="add-player-card-trigger add-player-card-trigger--acquire"
+                aria-label={
+                  acquiring ? "Acquiring database" : "Acquire database for use in this tab"
+                }
+                onClick={onAcquireStorage}
+                disabled={acquiring}
+              >
+                <span class="add-player-card-acquire-title">
+                  {acquiring ? "Acquiring…" : "Acquire database"}
+                </span>
+                <span class="add-player-card-acquire-sub">Another tab has the file open</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                class="add-player-card-trigger"
+                aria-label="Add player"
+                onClick={() => setAddPlayerOpen(true)}
+              >
+                <span class="add-player-card-plus" aria-hidden>
+                  +
+                </span>
+              </button>
+            )
           ) : (
             <form
               class="import-form import-form--add import-form--in-card"
@@ -295,7 +332,12 @@ export function Sidebar({
         </div>
       </div>
 
-      <button type="button" class="sidebar-clear-db" onClick={onClear}>
+      <button
+        type="button"
+        class="sidebar-clear-db"
+        onClick={onClear}
+        disabled={!canDownload}
+      >
         Clear Database
       </button>
 
@@ -305,7 +347,13 @@ export function Sidebar({
 
       <EloRangeSlider value={eloRange} onChange={onEloRangeChange} />
 
-      <StorageEstimatePanel />
+      <StorageEstimatePanel
+        state={storageState}
+        downloading={downloading}
+        canDownload={canDownload}
+        inUse={inUse}
+        onDownload={onDownloadStorage}
+      />
     </aside>
   );
 }

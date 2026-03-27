@@ -112,6 +112,8 @@ type OpeningTrackerProps = {
   bookmarksRevision: number;
   onBookmarkToggle: () => void;
   bookmarkPreview?: { fen: string; posHash: string; sideToMove: "w" | "b" } | null;
+  /** When true, another tab holds the DB; hide next-move rows. */
+  dbInUse?: boolean;
 };
 
 export function OpeningTracker({
@@ -122,6 +124,7 @@ export function OpeningTracker({
   bookmarksRevision,
   onBookmarkToggle,
   bookmarkPreview,
+  dbInUse = false,
 }: OpeningTrackerProps) {
   const loc = useExplorerLocation();
   const [posData, setPosData] = useState<PositionData | null>(null);
@@ -199,6 +202,10 @@ export function OpeningTracker({
   const bookmarkNameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (dbInUse) {
+      setStarred(false);
+      return;
+    }
     let cancelled = false;
     listBookmarks().then((rows) => {
       if (!cancelled) setStarred(rows.some((r) => r.fragment === bookmarkFragment));
@@ -206,11 +213,15 @@ export function OpeningTracker({
     return () => {
       cancelled = true;
     };
-  }, [bookmarkFragment, bookmarksRevision]);
+  }, [bookmarkFragment, bookmarksRevision, dbInUse]);
 
   useEffect(() => {
     setBookmarkAddMode(false);
   }, [bookmarkFragment]);
+
+  useEffect(() => {
+    if (dbInUse) setBookmarkAddMode(false);
+  }, [dbInUse]);
 
   useEffect(() => {
     if (!bookmarkAddMode || starred) return;
@@ -237,6 +248,10 @@ export function OpeningTracker({
     includeUsernames === undefined ? "\0__all__" : includeUsernames.join("\0");
 
   useEffect(() => {
+    if (dbInUse) {
+      setPosData(null);
+      return;
+    }
     let cancelled = false;
     fetchPositionData(
       posHash,
@@ -247,7 +262,7 @@ export function OpeningTracker({
     return () => {
       cancelled = true;
     };
-  }, [posHash, gamesDataRevision, includeKey]);
+  }, [posHash, gamesDataRevision, includeKey, dbInUse]);
 
   useEffect(() => {
     if (replay.error) {
@@ -484,9 +499,9 @@ export function OpeningTracker({
   }, [eloMin, eloMax]);
 
   const moves = useMemo<AggregatedMove[]>(() => {
-    if (!posData) return [];
+    if (dbInUse || !posData) return [];
     return filterPositionData(posData, colorFilter, eloRangeForFilter);
-  }, [posData, colorFilter, eloRangeForFilter]);
+  }, [dbInUse, posData, colorFilter, eloRangeForFilter]);
 
   const expandedGames = useMemo((): MoveGameListItem[] => {
     if (!posData || !expandedSan) return [];
@@ -690,7 +705,7 @@ export function OpeningTracker({
           </span>
         </div>
         <div class="explorer-header-right">
-          {bookmarkAddMode && !starred ? (
+          {bookmarkAddMode && !starred && !dbInUse ? (
             <>
               <input
                 ref={bookmarkNameInputRef}
@@ -724,10 +739,14 @@ export function OpeningTracker({
             <button
               type="button"
               class={`bookmark-star-btn ${starred ? "bookmark-star-btn--on" : ""}`}
-              disabled={!!replay.error}
+              disabled={!!replay.error || dbInUse}
               aria-pressed={starred}
               aria-label={
-                starred ? "Remove bookmark for this position" : "Add bookmark for this position"
+                dbInUse
+                  ? "Bookmarks unavailable while database is in use elsewhere"
+                  : starred
+                    ? "Remove bookmark for this position"
+                    : "Add bookmark for this position"
               }
               onClick={handleBookmarkStarButton}
             >

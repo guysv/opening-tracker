@@ -32,10 +32,110 @@ type PendingRequest = {
   reject: (reason: Error) => void;
 };
 
+const DB_IN_USE_PATTERNS = [
+  "createSyncAccessHandle",
+  "Access Handles cannot be created",
+  "another open Access Handle or Writable stream",
+];
+
+export function isDbInUseError(errorOrMessage: unknown): boolean {
+  const msg =
+    typeof errorOrMessage === "string"
+      ? errorOrMessage
+      : errorOrMessage instanceof Error
+        ? errorOrMessage.message
+        : "";
+  return DB_IN_USE_PATTERNS.some((p) => msg.includes(p));
+}
+
 let worker: Worker | null = null;
 let readyPromise: Promise<void> | null = null;
 let nextId = 1;
 const pending = new Map<number, PendingRequest>();
+
+const TAB_ID = crypto.randomUUID();
+const CHANNEL_NAME = "opening-tracker-db-owner";
+const RELEASE_TIMEOUT_MS = 1500;
+
+type OwnershipMessage =
+  | { kind: "REQUEST_RELEASE"; requesterTabId: string; requestId: string }
+  | { kind: "RELEASED"; ownerTabId: string; requestId: string };
+
+let ownerChannel: BroadcastChannel | null = null;
+
+function getChannel(): BroadcastChannel {
+  if (!ownerChannel) {
+    ownerChannel = new BroadcastChannel(CHANNEL_NAME);
+    ownerChannel.onmessage = onOwnershipMessage;
+  }
+  return ownerChannel;
+}
+
+function onOwnershipMessage(event: MessageEvent<OwnershipMessage>) {
+  const msg = event.data;
+  if (msg?.kind === "REQUEST_RELEASE" && msg.requesterTabId !== TAB_ID) {
+    if (worker && readyPromise) {
+      releaseDbOwnership();
+      getChannel().postMessage({
+        kind: "RELEASED",
+        ownerTabId: TAB_ID,
+        requestId: msg.requestId,
+      } satisfies OwnershipMessage);
+    }
+  }
+}
+
+function releaseDbOwnership() {
+  if (worker) {
+    worker.terminate();
+    worker = null;
+  }
+  readyPromise = null;
+  const err = new Error("Database released to another tab");
+  for (const entry of pending.values()) {
+    entry.reject(err);
+  }
+  pending.clear();
+}
+
+export async function acquireDbOwnership(): Promise<void> {
+  const requestId = crypto.randomUUID();
+  const ch = getChannel();
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+
+    function onRelease(event: MessageEvent<OwnershipMessage>) {
+      if (
+        event.data?.kind === "RELEASED" &&
+        event.data.requestId === requestId &&
+        !settled
+      ) {
+        settled = true;
+        ch.removeEventListener("message", onRelease);
+        resolve();
+      }
+    }
+
+    ch.addEventListener("message", onRelease);
+    ch.postMessage({
+      kind: "REQUEST_RELEASE",
+      requesterTabId: TAB_ID,
+      requestId,
+    } satisfies OwnershipMessage);
+
+    setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        ch.removeEventListener("message", onRelease);
+        resolve();
+      }
+    }, RELEASE_TIMEOUT_MS);
+  });
+
+  releaseDbOwnership();
+  await initDb();
+}
 
 function getWorker(): Worker {
   if (!worker) throw new Error("DB not initialized — call initDb() first");
@@ -62,8 +162,8 @@ async function request<T>(msg: Record<string, unknown>): Promise<T> {
 export function initDb(resetOnInit = false): Promise<void> {
   if (readyPromise) return readyPromise;
 
-  // Use ./workers/ (not ../workers/): the bundle lives next to the workers/ folder;
-  // ../ escapes the repo subpath on static hosts that use a URL prefix.
+  getChannel();
+
   const workerUrl = new URL("./workers/db.worker.js", import.meta.url);
   if (resetOnInit) {
     workerUrl.searchParams.set("resetOnInit", "1");

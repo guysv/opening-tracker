@@ -6,6 +6,7 @@ import {
   deletePlayer,
   getArchivesLastModifiedForUser,
   initDb,
+  isDbInUseError,
   listPlayers,
   touchArchivesChecked,
   upsertArchives,
@@ -20,6 +21,7 @@ import type { ImportActivitySnapshot } from "./ImportStatusPanel";
 import { BookmarkSidebar } from "./BookmarkSidebar";
 import { OpeningTracker } from "./OpeningTracker";
 import { Sidebar } from "./Sidebar";
+import { useStorageDbState } from "./useStorageDbState";
 
 const DEFAULT_ELO_RANGE: EloRange = [0, 3500];
 const DB_RESET_ON_STARTUP_FLAG = "openingTracker:resetDbOnStartup";
@@ -103,7 +105,13 @@ export function App() {
         setStatus("Ready to import games.");
       })
       .catch((e) => {
-        setStatus(`DB init failed: ${e instanceof Error ? e.message : String(e)}`);
+        if (isDbInUseError(e)) {
+          setStatus(
+            "Database is open in another tab. Use \"Acquire database\" at the top of the sidebar.",
+          );
+        } else {
+          setStatus(`DB init failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
       });
   }, []);
 
@@ -405,6 +413,15 @@ export function App() {
     setBookmarksRevision((n) => n + 1);
   }, []);
 
+  const handleDbAcquired = useCallback(() => {
+    dbReadyRef.current = true;
+    setBootDone(true);
+    setStatus("Ready to import games.");
+    void listPlayers().then((rows) => setPlayers(rows));
+  }, []);
+
+  const storageDb = useStorageDbState({ onAcquireSuccess: handleDbAcquired });
+
   return (
     <div class="layout">
       <Sidebar
@@ -420,6 +437,13 @@ export function App() {
         onDeletePlayer={handleDeletePlayer}
         onTogglePlayer={handleToggleCard}
         onClear={handleCleanDb}
+        storageState={storageDb.state}
+        downloading={storageDb.downloading}
+        acquiring={storageDb.acquiring}
+        onAcquireStorage={() => void storageDb.handleAcquire()}
+        onDownloadStorage={() => void storageDb.handleDownload()}
+        inUse={storageDb.inUse}
+        canDownload={storageDb.canDownload}
       />
       <OpeningTracker
         eloRange={eloRange}
@@ -429,6 +453,7 @@ export function App() {
         bookmarksRevision={bookmarksRevision}
         onBookmarkToggle={bumpBookmarks}
         bookmarkPreview={bookmarkPreview}
+        dbInUse={storageDb.inUse}
       />
       <BookmarkSidebar
         eloRange={eloRange}
@@ -437,6 +462,7 @@ export function App() {
         bookmarksRevision={bookmarksRevision}
         onBookmarksChanged={bumpBookmarks}
         onPreviewChange={setBookmarkPreview}
+        dbInUse={storageDb.inUse}
       />
     </div>
   );

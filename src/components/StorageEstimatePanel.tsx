@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from "preact/hooks";
-import { exportDb, getDbSize } from "../lib/dbClient";
+import type { StoragePanelState } from "./useStorageDbState";
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
@@ -12,77 +11,56 @@ function formatBytes(bytes: number): string {
   return `${n.toFixed(digits)} ${sizes[i]}`;
 }
 
-type PanelState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; sizeBytes: number };
+export type StorageEstimatePanelProps = {
+  state: StoragePanelState;
+  downloading: boolean;
+  canDownload: boolean;
+  inUse: boolean;
+  onDownload: () => void;
+};
 
-export function StorageEstimatePanel() {
-  const [state, setState] = useState<PanelState>({ status: "loading" });
-  const [downloading, setDownloading] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function tick() {
-      try {
-        const sizeBytes = await getDbSize();
-        if (!cancelled) setState({ status: "ready", sizeBytes });
-      } catch (e) {
-        const message = e instanceof Error ? e.message : "Unknown error";
-        if (!cancelled) setState({ status: "error", message });
-      }
-    }
-
-    void tick();
-    const id = window.setInterval(() => void tick(), 5_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
-
-  const handleDownload = useCallback(async () => {
-    setDownloading(true);
-    try {
-      const bytes = await exportDb();
-      const blob = new Blob([new Uint8Array(bytes)], { type: "application/x-sqlite3" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "opening-tracker.db";
-      a.click();
-      URL.revokeObjectURL(url);
-    } finally {
-      setDownloading(false);
-    }
-  }, []);
-
+export function StorageEstimatePanel({
+  state,
+  downloading,
+  canDownload,
+  inUse,
+  onDownload,
+}: StorageEstimatePanelProps) {
   return (
     <section class="storage-widget" aria-live="polite">
       <h3 class="storage-widget-title">Database info</h3>
       {state.status === "loading" && (
         <p class="storage-widget-value storage-widget-muted">Measuring…</p>
       )}
-      {state.status === "error" && (
+      {state.status === "error" && !inUse && (
         <p class="storage-widget-value storage-widget-error">{state.message}</p>
       )}
-      {state.status === "ready" && (
-        <div class="storage-widget-rows">
+      {inUse && (
+        <p class="storage-widget-value storage-widget-muted">
+          Database is open in another tab.
+        </p>
+      )}
+      <div class="storage-widget-rows">
+        {state.status === "ready" ? (
           <div class="storage-widget-row">
             <span>Size</span>
             <span class="storage-widget-mono">{formatBytes(state.sizeBytes)}</span>
           </div>
-          <button
-            class="storage-widget-download"
-            onClick={handleDownload}
-            disabled={downloading}
-          >
-            {downloading ? "Exporting…" : "Download .db"}
-          </button>
-        </div>
-      )}
+        ) : (
+          <div class="storage-widget-row">
+            <span>Size</span>
+            <span class="storage-widget-mono">—</span>
+          </div>
+        )}
+        <button
+          class="storage-widget-download"
+          type="button"
+          onClick={onDownload}
+          disabled={downloading || !canDownload}
+        >
+          {downloading ? "Exporting…" : "Download .db"}
+        </button>
+      </div>
     </section>
   );
 }

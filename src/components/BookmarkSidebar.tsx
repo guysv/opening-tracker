@@ -46,6 +46,8 @@ type BookmarkSidebarProps = {
   includeUsernames?: string[];
   onBookmarksChanged: () => void;
   onPreviewChange: (preview: { fen: string; posHash: string; sideToMove: "w" | "b" } | null) => void;
+  /** When true, another tab holds the DB; do not list bookmarks. */
+  dbInUse?: boolean;
 };
 
 export function BookmarkSidebar({
@@ -55,6 +57,7 @@ export function BookmarkSidebar({
   includeUsernames,
   onBookmarksChanged,
   onPreviewChange,
+  dbInUse = false,
 }: BookmarkSidebarProps) {
   const explorerLoc = useExplorerLocation();
   const replay = useMemo(() => replayMoves(explorerLoc.via), [explorerLoc.via]);
@@ -74,6 +77,13 @@ export function BookmarkSidebar({
     includeUsernames === undefined ? "\0__all__" : includeUsernames.join("\0");
 
   useEffect(() => {
+    if (dbInUse) {
+      setCards([]);
+      setLoading(false);
+      onPreviewChange(null);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
 
@@ -127,11 +137,13 @@ export function BookmarkSidebar({
       cancelled = true;
     };
   }, [
+    dbInUse,
     bookmarksRevision,
     gamesDataRevision,
     includeKey,
     eloRange[0],
     eloRange[1],
+    onPreviewChange,
   ]);
 
   useEffect(() => {
