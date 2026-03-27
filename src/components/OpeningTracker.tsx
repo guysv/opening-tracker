@@ -583,6 +583,7 @@ export function OpeningTracker({
             evalData={hoverReplay ? hoverSfEval : sfEval}
             loading={hoverReplay ? hoverSfLoading : sfLoading}
             error={hoverReplay ? hoverSfError : sfError}
+            perspective={colorFilter}
           />
           <ChessBoard
             fen={hoverPreview?.fen ?? replay.fen}

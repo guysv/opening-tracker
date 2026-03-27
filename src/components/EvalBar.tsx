@@ -14,14 +14,15 @@ export function evalToMarkerPercent(ev: StockfishDisplayEval): number {
   return 50 + t * 50;
 }
 
-function formatEval(ev: StockfishDisplayEval): string {
+function formatEval(ev: StockfishDisplayEval, perspective: "w" | "b"): string {
+  const blackPerspective = perspective === "b";
   if (ev.kind === "mate" && ev.mate != null) {
-    const m = ev.mate;
+    const m = blackPerspective ? -ev.mate : ev.mate;
     if (m > 0) return `+M${m}`;
     if (m < 0) return `M${m}`;
     return "0";
   }
-  const cp = ev.cp ?? 0;
+  const cp = blackPerspective ? -(ev.cp ?? 0) : (ev.cp ?? 0);
   const pawns = cp / 100;
   const sign = pawns > 0 ? "+" : "";
   return `${sign}${pawns.toFixed(2)}`;
@@ -31,23 +32,47 @@ type EvalBarProps = {
   evalData: StockfishDisplayEval | null;
   loading: boolean;
   error: boolean;
+  perspective: "w" | "b";
 };
 
-export function EvalBar({ evalData, loading, error }: EvalBarProps) {
+export function EvalBar({
+  evalData,
+  loading,
+  error,
+  perspective,
+}: EvalBarProps) {
+  const whiteAtBottom = perspective === "w";
   const pct = evalData ? evalToMarkerPercent(evalData) : 50;
-  const label = evalData ? formatEval(evalData) : "—";
+  const label = evalData ? formatEval(evalData, perspective) : "—";
+  const whiteHeight = `${pct}%`;
+  const blackHeight = `${100 - pct}%`;
 
   return (
     <div class="eval-bar-wrap" aria-label="Engine evaluation">
       <div class="eval-bar-track">
-        <div
-          class="eval-bar-fill eval-bar-fill--light"
-          style={{ height: `${100 - pct}%` }}
-        />
-        <div
-          class="eval-bar-fill eval-bar-fill--dark"
-          style={{ height: `${pct}%` }}
-        />
+        {whiteAtBottom ? (
+          <>
+            <div
+              class="eval-bar-fill eval-bar-fill--dark"
+              style={{ height: blackHeight }}
+            />
+            <div
+              class="eval-bar-fill eval-bar-fill--light"
+              style={{ height: whiteHeight }}
+            />
+          </>
+        ) : (
+          <>
+            <div
+              class="eval-bar-fill eval-bar-fill--light"
+              style={{ height: whiteHeight }}
+            />
+            <div
+              class="eval-bar-fill eval-bar-fill--dark"
+              style={{ height: blackHeight }}
+            />
+          </>
+        )}
       </div>
       <div class="eval-bar-label">
         {error ? "!" : loading ? "…" : label}
