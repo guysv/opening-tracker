@@ -764,32 +764,108 @@ button:hover {
 /* ─── elo range filter ─── */
 
 .elo-filter {
-  margin-top: auto;
-  padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
+  display: grid;
+  grid-template-columns: auto minmax(5.5rem, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 0.45rem;
+  row-gap: 0.2rem;
+  align-items: center;
+  min-width: 11rem;
+  max-width: 15rem;
+  flex-shrink: 0;
 }
 
-.elo-filter-title {
-  font-size: 0.95rem;
+.elo-filter-inline-label {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 0.72rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  align-self: center;
 }
 
-.elo-filter-labels {
+.elo-filter .dual-range {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.elo-filter-range-below {
+  grid-column: 2;
+  grid-row: 2;
   display: flex;
   justify-content: space-between;
-  font-size: 0.82rem;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
+  line-height: 1.2;
+  width: 100%;
+  min-width: 0;
 }
 
-.elo-filter-value {
-  min-width: 2.5rem;
+.elo-filter-value--min {
+  text-align: left;
 }
 
-.elo-filter-labels .elo-filter-value:last-child {
+.elo-filter-value--max {
+  text-align: right;
+}
+
+/* date range filter (same layout as elo-filter; slightly wider for labels) */
+
+.date-filter {
+  display: grid;
+  grid-template-columns: auto minmax(6rem, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 0.45rem;
+  row-gap: 0.2rem;
+  align-items: center;
+  min-width: 12.5rem;
+  max-width: 18rem;
+  flex-shrink: 0;
+}
+
+.date-filter-inline-label {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  align-self: center;
+}
+
+.date-filter .dual-range {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.date-filter-range-below {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  line-height: 1.2;
+  width: 100%;
+  min-width: 0;
+}
+
+.date-filter-value--min {
+  text-align: left;
+}
+
+.date-filter-value--max {
   text-align: right;
 }
 
@@ -820,6 +896,26 @@ button:hover {
   pointer-events: none;
 }
 
+/* Draggable region between thumbs: pans the whole [low, high] window */
+.dual-range-pan {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  z-index: 1;
+  border-radius: 3px;
+}
+
+.dual-range-pan:active {
+  cursor: grabbing;
+}
+
 .dual-range-input {
   position: absolute;
   top: 0;
@@ -833,6 +929,7 @@ button:hover {
   pointer-events: none;
   -webkit-appearance: none;
   appearance: none;
+  z-index: 2;
 }
 
 .dual-range-input::-webkit-slider-runnable-track {
@@ -882,7 +979,7 @@ button:hover {
 }
 
 .dual-range-input--high {
-  z-index: 1;
+  z-index: 3;
 }
 
 /* ─── sidebar status ─── */
@@ -907,8 +1004,25 @@ button:hover {
 
 .explorer-title-row {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  flex-wrap: wrap;
+}
+
+.explorer-title-left {
+  display: flex;
   align-items: baseline;
   gap: 0.45rem;
+  min-width: 0;
+}
+
+.explorer-title-filters {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 1rem 1.25rem;
 }
 
 .explorer-title {

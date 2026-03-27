@@ -6,11 +6,13 @@ import {
   truncateBookmarkTitle,
 } from "../lib/bookmarkLabel";
 import {
+  effectiveDateFilter,
   fetchPositionData,
   filterPositionData,
   positionTotalsFromMoves,
   replayMoves,
   type AggregatedMove,
+  type DateRangeSec,
   type EloRange,
 } from "../lib/explorerData";
 import { buildFragment, navigateTo, parseFragment } from "../lib/explorerUrl";
@@ -40,6 +42,8 @@ type CardModel = {
 };
 
 type BookmarkSidebarProps = {
+  dateBoundsSec: DateRangeSec | null;
+  dateRangeSec: DateRangeSec | null;
   eloRange: EloRange;
   gamesDataRevision: number;
   bookmarksRevision: number;
@@ -51,6 +55,8 @@ type BookmarkSidebarProps = {
 };
 
 export function BookmarkSidebar({
+  dateBoundsSec,
+  dateRangeSec,
   eloRange,
   gamesDataRevision,
   bookmarksRevision,
@@ -75,6 +81,11 @@ export function BookmarkSidebar({
 
   const includeKey =
     includeUsernames === undefined ? "\0__all__" : includeUsernames.join("\0");
+
+  const dateRangeForFilter = useMemo(
+    () => effectiveDateFilter(dateRangeSec, dateBoundsSec),
+    [dateRangeSec, dateBoundsSec],
+  );
 
   useEffect(() => {
     if (dbInUse) {
@@ -111,7 +122,7 @@ export function BookmarkSidebar({
               parsed.posHash,
               includeUsernames === undefined ? undefined : includeUsernames,
             );
-            const moves = filterPositionData(data, parsed.color, eloRange);
+            const moves = filterPositionData(data, parsed.color, eloRange, dateRangeForFilter);
             totals = positionTotalsFromMoves(moves);
           }
 
@@ -143,6 +154,10 @@ export function BookmarkSidebar({
     includeKey,
     eloRange[0],
     eloRange[1],
+    dateRangeSec?.[0],
+    dateRangeSec?.[1],
+    dateBoundsSec?.[0],
+    dateBoundsSec?.[1],
     onPreviewChange,
   ]);
 

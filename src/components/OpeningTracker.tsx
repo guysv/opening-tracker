@@ -12,6 +12,8 @@ import {
   startPositionHash,
   type AggregatedMove,
   type ColorFilter,
+  effectiveDateFilter,
+  type DateRangeSec,
   type EloRange,
   type MoveGameListItem,
   type PositionData,
@@ -35,6 +37,8 @@ import {
 } from "../lib/stockfishEval";
 import { buildFragment, navigateTo } from "../lib/explorerUrl";
 import { ChessBoard } from "./ChessBoard";
+import { DateRangeSlider } from "./DateRangeSlider";
+import { EloRangeSlider } from "./EloRangeSlider";
 import { EvalBar } from "./EvalBar";
 import { MoveResultBar } from "./MoveResultBar";
 
@@ -104,7 +108,11 @@ function moveEvalDiffClass(entry: MoveEvalDiffEntry | undefined): string {
 }
 
 type OpeningTrackerProps = {
+  dateBoundsSec: DateRangeSec | null;
+  dateRangeSec: DateRangeSec | null;
+  onDateRangeChange: (range: DateRangeSec) => void;
   eloRange: EloRange;
+  onEloRangeChange: (range: EloRange) => void;
   expandResultBars: boolean;
   gamesDataRevision: number;
   /** When set, only moves for these tracked users; `undefined` = no filter (all rows). */
@@ -117,7 +125,11 @@ type OpeningTrackerProps = {
 };
 
 export function OpeningTracker({
+  dateBoundsSec,
+  dateRangeSec,
+  onDateRangeChange,
   eloRange,
+  onEloRangeChange,
   expandResultBars,
   gamesDataRevision,
   includeUsernames,
@@ -498,15 +510,20 @@ export function OpeningTracker({
     return eloMin === 0 && eloMax === 3500 ? null : [eloMin, eloMax];
   }, [eloMin, eloMax]);
 
+  const dateRangeForFilter = useMemo(
+    () => effectiveDateFilter(dateRangeSec, dateBoundsSec),
+    [dateRangeSec, dateBoundsSec],
+  );
+
   const moves = useMemo<AggregatedMove[]>(() => {
     if (dbInUse || !posData) return [];
-    return filterPositionData(posData, colorFilter, eloRangeForFilter);
-  }, [dbInUse, posData, colorFilter, eloRangeForFilter]);
+    return filterPositionData(posData, colorFilter, eloRangeForFilter, dateRangeForFilter);
+  }, [dbInUse, posData, colorFilter, eloRangeForFilter, dateRangeForFilter]);
 
   const expandedGames = useMemo((): MoveGameListItem[] => {
     if (!posData || !expandedSan) return [];
-    return listGamesForMove(posData, expandedSan, colorFilter, eloRangeForFilter);
-  }, [posData, expandedSan, colorFilter, eloRangeForFilter]);
+    return listGamesForMove(posData, expandedSan, colorFilter, eloRangeForFilter, dateRangeForFilter);
+  }, [posData, expandedSan, colorFilter, eloRangeForFilter, dateRangeForFilter]);
 
   useEffect(() => {
     if (replay.error || moves.length === 0) {
@@ -650,8 +667,20 @@ export function OpeningTracker({
   return (
     <main class="explorer">
       <div class="explorer-title-row">
-        <span class="explorer-title">Opening Tracker</span>
-        <span class="explorer-version">v{pkg.version}</span>
+        <div class="explorer-title-left">
+          <span class="explorer-title">Opening Tracker</span>
+          <span class="explorer-version">v{pkg.version}</span>
+        </div>
+        <div class="explorer-title-filters">
+          {dateBoundsSec != null && dateRangeSec != null ? (
+            <DateRangeSlider
+              bounds={dateBoundsSec}
+              value={dateRangeSec}
+              onChange={onDateRangeChange}
+            />
+          ) : null}
+          <EloRangeSlider value={eloRange} onChange={onEloRangeChange} />
+        </div>
       </div>
 
       <div

@@ -7,6 +7,34 @@ import type { GameRecord, MoveRecord } from "./gamesDb";
 
 export type EloRange = [number, number];
 
+/** Inclusive game `endTime` window in **Unix seconds** (matches `GameRecord.endTime`). */
+export type DateRangeSec = [number, number];
+
+/** Align DB min/max `endTime` to UTC calendar-day bounds for the slider. */
+export function toDayAlignedDateRange(minSec: number, maxSec: number): DateRangeSec {
+  const lo = Math.floor(minSec / 86400) * 86400;
+  const hi = Math.floor(maxSec / 86400) * 86400 + 86399;
+  return [lo, hi];
+}
+
+/** No date filter when the selection matches the full DB-derived span. */
+export function effectiveDateFilter(
+  selected: DateRangeSec | null,
+  bounds: DateRangeSec | null,
+): DateRangeSec | null {
+  if (!selected || !bounds) return null;
+  if (selected[0] === bounds[0] && selected[1] === bounds[1]) return null;
+  return selected;
+}
+
+export function clampDateRangeToBounds(selected: DateRangeSec, bounds: DateRangeSec): DateRangeSec {
+  const [bLo, bHi] = bounds;
+  let lo = Math.max(bLo, Math.min(selected[0], bHi));
+  let hi = Math.max(bLo, Math.min(selected[1], bHi));
+  if (lo > hi) return [bHi, bHi];
+  return [lo, hi];
+}
+
 function zobristKeyToHex(key: bigint): string {
   return key.toString(16).padStart(16, "0");
 }
@@ -219,6 +247,7 @@ export function filterPositionData(
   data: PositionData,
   colorFilter: ColorFilter,
   eloRange: EloRange | null,
+  dateRangeSec: DateRangeSec | null = null,
 ): AggregatedMove[] {
   let filtered = data.records;
 
@@ -230,6 +259,17 @@ export function filterPositionData(
       const rating = opponentRating(r, g);
       if (rating == null) return true;
       return rating >= minElo && rating <= maxElo;
+    });
+  }
+
+  if (dateRangeSec) {
+    const [minT, maxT] = dateRangeSec;
+    filtered = filtered.filter((r) => {
+      const g = data.games.get(r.gameId);
+      if (!g) return true;
+      const t = g.endTime;
+      if (t == null) return true;
+      return t >= minT && t <= maxT;
     });
   }
 
@@ -253,6 +293,7 @@ export function listGamesForMove(
   san: string,
   colorFilter: ColorFilter,
   eloRange: EloRange | null,
+  dateRangeSec: DateRangeSec | null = null,
 ): MoveGameListItem[] {
   let filtered = data.records.filter((r) => r.san === san && r.userColor === colorFilter);
   if (eloRange) {
@@ -263,6 +304,17 @@ export function listGamesForMove(
       const rating = opponentRating(r, g);
       if (rating == null) return true;
       return rating >= minElo && rating <= maxElo;
+    });
+  }
+
+  if (dateRangeSec) {
+    const [minT, maxT] = dateRangeSec;
+    filtered = filtered.filter((r) => {
+      const g = data.games.get(r.gameId);
+      if (!g) return true;
+      const t = g.endTime;
+      if (t == null) return true;
+      return t >= minT && t <= maxT;
     });
   }
 

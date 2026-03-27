@@ -5,6 +5,7 @@ import {
   clearGamesStore,
   deletePlayer,
   getArchivesLastModifiedForUser,
+  getGamesEndTimeBounds,
   initDb,
   isDbInUseError,
   listPlayers,
@@ -16,7 +17,12 @@ import {
   type PlayerListRow,
 } from "../lib/dbClient";
 import type { GameRecord, MoveRecord } from "../lib/gamesDb";
-import type { EloRange } from "../lib/explorerData";
+import {
+  clampDateRangeToBounds,
+  toDayAlignedDateRange,
+  type DateRangeSec,
+  type EloRange,
+} from "../lib/explorerData";
 import type { ImportActivitySnapshot } from "./ImportStatusPanel";
 import { BookmarkSidebar } from "./BookmarkSidebar";
 import { OpeningTracker } from "./OpeningTracker";
@@ -55,6 +61,9 @@ export function App() {
   const [status, setStatus] = useState("Initializing database...");
   const [importActivity, setImportActivity] = useState<ImportActivitySnapshot | null>(null);
   const [eloRange, setEloRange] = useState<EloRange>(DEFAULT_ELO_RANGE);
+  const [dateBoundsSec, setDateBoundsSec] = useState<DateRangeSec | null>(null);
+  const [dateRangeSec, setDateRangeSec] = useState<DateRangeSec | null>(null);
+  const prevDateBoundsRef = useRef<DateRangeSec | null>(null);
   const [expandResultBars, setExpandResultBars] = useState(false);
   const [gamesDataRevision, setGamesDataRevision] = useState(0);
   const [players, setPlayers] = useState<PlayerListRow[]>([]);
@@ -422,15 +431,54 @@ export function App() {
 
   const storageDb = useStorageDbState({ onAcquireSuccess: handleDbAcquired });
 
+  useEffect(() => {
+    if (!bootDone) return;
+    if (storageDb.inUse) {
+      setDateBoundsSec(null);
+      setDateRangeSec(null);
+      prevDateBoundsRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const raw = await getGamesEndTimeBounds();
+        if (cancelled) return;
+        if (raw.minSec == null || raw.maxSec == null) {
+          setDateBoundsSec(null);
+          setDateRangeSec(null);
+          prevDateBoundsRef.current = null;
+          return;
+        }
+        const bounds = toDayAlignedDateRange(raw.minSec, raw.maxSec);
+        setDateBoundsSec(bounds);
+        setDateRangeSec((prev) => {
+          const oldB = prevDateBoundsRef.current;
+          prevDateBoundsRef.current = bounds;
+          if (oldB == null || prev == null) return bounds;
+          const wasFull = prev[0] === oldB[0] && prev[1] === oldB[1];
+          if (wasFull) return bounds;
+          return clampDateRangeToBounds(prev, bounds);
+        });
+      } catch {
+        if (!cancelled) setDateBoundsSec(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootDone, gamesDataRevision, storageDb.inUse]);
+
   return (
     <div class="layout">
       <Sidebar
         importActivity={importActivity}
         status={status}
-        eloRange={eloRange}
         players={players}
         disabledUsernames={disabledUsernames}
-        onEloRangeChange={setEloRange}
         onImportInitial={handleImportInitial}
         onSync={handleSync}
         onExtend={handleExtend}
@@ -446,7 +494,11 @@ export function App() {
         canDownload={storageDb.canDownload}
       />
       <OpeningTracker
+        dateBoundsSec={dateBoundsSec}
+        dateRangeSec={dateRangeSec}
+        onDateRangeChange={setDateRangeSec}
         eloRange={eloRange}
+        onEloRangeChange={setEloRange}
         expandResultBars={expandResultBars}
         gamesDataRevision={gamesDataRevision}
         includeUsernames={includeUsernames}
@@ -456,6 +508,8 @@ export function App() {
         dbInUse={storageDb.inUse}
       />
       <BookmarkSidebar
+        dateBoundsSec={dateBoundsSec}
+        dateRangeSec={dateRangeSec}
         eloRange={eloRange}
         gamesDataRevision={gamesDataRevision}
         includeUsernames={includeUsernames}

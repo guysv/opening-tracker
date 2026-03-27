@@ -291,6 +291,17 @@ export async function listPlayers(): Promise<PlayerListRow[]> {
   return (await request<PlayerListRow[]>({ type: "LIST_PLAYERS" })) ?? [];
 }
 
+export async function getGamesEndTimeBounds(): Promise<{
+  minSec: number | null;
+  maxSec: number | null;
+}> {
+  return (
+    (await request<{ minSec: number | null; maxSec: number | null }>({
+      type: "GET_GAMES_END_TIME_BOUNDS",
+    })) ?? { minSec: null, maxSec: null }
+  );
+}
+
 export async function deletePlayer(username: string): Promise<void> {
   await request({ type: "DELETE_PLAYER", username: username.trim().toLowerCase() });
 }

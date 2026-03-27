@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import type { PlayerListRow } from "../lib/dbClient";
-import type { EloRange } from "../lib/explorerData";
-import { EloRangeSlider } from "./EloRangeSlider";
 import { ImportStatusPanel, type ImportActivitySnapshot } from "./ImportStatusPanel";
 import { StorageEstimatePanel } from "./StorageEstimatePanel";
 import type { StoragePanelState } from "./useStorageDbState";
@@ -10,10 +8,8 @@ import type { StoragePanelState } from "./useStorageDbState";
 type SidebarProps = {
   importActivity: ImportActivitySnapshot | null;
   status: string;
-  eloRange: EloRange;
   players: PlayerListRow[];
   disabledUsernames: Record<string, boolean>;
-  onEloRangeChange: (range: EloRange) => void;
   onImportInitial: (username: string, monthsBack: number) => void;
   onSync: (player: PlayerListRow) => void;
   onExtend: (player: PlayerListRow, extendMonths: number) => void;
@@ -51,10 +47,8 @@ function formatLastSync(ms: number | null): string {
 export function Sidebar({
   importActivity,
   status,
-  eloRange,
   players,
   disabledUsernames,
-  onEloRangeChange,
   onImportInitial,
   onSync,
   onExtend,
@@ -344,8 +338,6 @@ export function Sidebar({
       {importActivity ? <ImportStatusPanel activity={importActivity} /> : null}
 
       <p class="sidebar-status">{status}</p>
-
-      <EloRangeSlider value={eloRange} onChange={onEloRangeChange} />
 
       <StorageEstimatePanel
         state={storageState}

@@ -48,7 +48,8 @@ type RequestMessage =
   | { type: "LIST_BOOKMARKS"; id: number }
   | { type: "ADD_BOOKMARK"; id: number; fragment: string; name: string }
   | { type: "REMOVE_BOOKMARK"; id: number; fragment: string }
-  | { type: "SET_BOOKMARK_NAME"; id: number; fragment: string; name: string };
+  | { type: "SET_BOOKMARK_NAME"; id: number; fragment: string; name: string }
+  | { type: "GET_GAMES_END_TIME_BOUNDS"; id: number };
 
 function reply(id: number, result: unknown, error?: string, transfer?: Transferable[]) {
   const msg = error ? { id, error } : { id, result };
@@ -362,6 +363,24 @@ function getGamesByUuids(uuids: number[]): GameRecord[] {
   }) as unknown as GameRecord[];
 }
 
+/** Min/max `games.endTime` among rows with a non-null end time (Unix seconds). */
+function getGamesEndTimeBounds(): { minSec: number | null; maxSec: number | null } {
+  const raw = db.exec(
+    "SELECT MIN(endTime) AS lo, MAX(endTime) AS hi FROM games WHERE endTime IS NOT NULL",
+    { rowMode: "object", returnValue: "resultRows" },
+  ) as unknown as { lo: number | null; hi: number | null }[];
+  const row = raw[0];
+  if (!row || row.lo == null || row.hi == null) {
+    return { minSec: null, maxSec: null };
+  }
+  const lo = Number(row.lo);
+  const hi = Number(row.hi);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+    return { minSec: null, maxSec: null };
+  }
+  return { minSec: lo, maxSec: hi };
+}
+
 function getPositionData(fenHash: string, includeUsernames?: string[]): PositionDataPayload {
   const records = getMovesForPosition(fenHash, includeUsernames);
   const gamesById = new Map<number, GameRecord>();
@@ -656,6 +675,9 @@ initDb()
           case "SET_BOOKMARK_NAME":
             setBookmarkName(msg.fragment, msg.name);
             reply(msg.id, null);
+            break;
+          case "GET_GAMES_END_TIME_BOUNDS":
+            reply(msg.id, getGamesEndTimeBounds());
             break;
         }
       } catch (e) {
