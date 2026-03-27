@@ -684,16 +684,6 @@ export function OpeningTracker({
           <span class="explorer-title">Opening Tracker</span>
           <span class="explorer-version">v{pkg.version}</span>
         </div>
-        <div class="explorer-title-filters">
-          {dateBoundsSec != null && dateRangeSec != null ? (
-            <DateRangeSlider
-              bounds={dateBoundsSec}
-              value={dateRangeSec}
-              onChange={onDateRangeChange}
-            />
-          ) : null}
-          <EloRangeSlider value={eloRange} onChange={onEloRangeChange} />
-        </div>
       </div>
 
       <div
@@ -745,6 +735,16 @@ export function OpeningTracker({
             />
             {displaySideToMove === "w" ? "White" : "Black"} to move
           </span>
+        </div>
+        <div class="explorer-header-filters">
+          {dateBoundsSec != null && dateRangeSec != null ? (
+            <DateRangeSlider
+              bounds={dateBoundsSec}
+              value={dateRangeSec}
+              onChange={onDateRangeChange}
+            />
+          ) : null}
+          <EloRangeSlider value={eloRange} onChange={onEloRangeChange} />
         </div>
         <div class="explorer-header-right">
           {bookmarkAddMode && !starred && !dbInUse ? (

@@ -1096,14 +1096,6 @@ button:hover {
   min-width: 0;
 }
 
-.explorer-title-filters {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 1rem 1.25rem;
-}
-
 .explorer-title {
   font-size: 1.05rem;
   font-weight: 700;
@@ -1166,8 +1158,19 @@ button:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1rem 1.25rem;
+  flex-wrap: wrap;
   flex-shrink: 0;
+}
+
+.explorer-header-filters {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1rem 1.25rem;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .explorer-header-left {
