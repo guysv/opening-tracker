@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.9.3
+
+- Add bookmark hover previews in the opening explorer and improve board interaction polish.
+- Improve move animation flow and hints handling across `ChessBoard` and `OpeningTracker`.
+- Update evaluation bar behavior for perspective-aware score display.
+
 ## 0.9.2
 
 - **CI:** Release workflow no longer passes `GITHUB_TOKEN` to Wrangler (Cloudflare deploy only needs API token + account ID). Tagged release to verify Cloudflare Pages deploy with repo secrets.
