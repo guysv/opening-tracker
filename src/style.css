@@ -1230,11 +1230,12 @@ button:hover {
 
 .explorer-header-filters {
   display: flex;
+  justify-content: flex-end;
   align-items: flex-start;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 1rem 1.25rem;
-  flex: 1 1 auto;
+  /* basis 0 so this column reliably absorbs free space between left and right */
+  flex: 1 1 0%;
   min-width: 0;
 }
 
