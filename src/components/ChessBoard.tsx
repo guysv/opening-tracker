@@ -179,6 +179,10 @@ export function ChessBoard({
     const prevRows = prevRowsRef.current;
     prevFenRef.current = fen;
     prevRowsRef.current = rows;
+    if (animTimerRef.current !== null) {
+      window.clearTimeout(animTimerRef.current);
+      animTimerRef.current = null;
+    }
     if (!prevFen || prevFen === fen || !prevRows) {
       setMoveAnims((current) => (current.length === 0 ? current : []));
       return;

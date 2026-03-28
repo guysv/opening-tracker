@@ -190,24 +190,32 @@ export function OpeningTracker({
     return previewHoveredMove(loc.via, previewSan);
   }, [previewSan, loc.via, replay.error]);
 
+  const hoverDebounceRef = useRef<number | null>(null);
+
   const handleMoveRowEnter = (san: string) => {
-    const nextPreview = previewHoveredMove(loc.via, san);
-    if (
-      hoverPreview &&
-      nextPreview &&
-      hoverPreview.fromSq &&
-      hoverPreview.toSq &&
-      nextPreview.fromSq &&
-      nextPreview.toSq
-    ) {
-      setHoverAnimationHints([
-        { from: hoverPreview.toSq, to: hoverPreview.fromSq },
-        { from: nextPreview.fromSq, to: nextPreview.toSq },
-      ]);
-    } else {
-      setHoverAnimationHints(null);
+    if (hoverDebounceRef.current !== null) {
+      window.clearTimeout(hoverDebounceRef.current);
     }
-    setPreviewSan(san);
+    hoverDebounceRef.current = window.setTimeout(() => {
+      hoverDebounceRef.current = null;
+      const nextPreview = previewHoveredMove(loc.via, san);
+      if (
+        hoverPreview &&
+        nextPreview &&
+        hoverPreview.fromSq &&
+        hoverPreview.toSq &&
+        nextPreview.fromSq &&
+        nextPreview.toSq
+      ) {
+        setHoverAnimationHints([
+          { from: hoverPreview.toSq, to: hoverPreview.fromSq },
+          { from: nextPreview.fromSq, to: nextPreview.toSq },
+        ]);
+      } else {
+        setHoverAnimationHints(null);
+      }
+      setPreviewSan(san);
+    }, 60);
   };
 
   const hoverReplay = useMemo((): ReplayResult | null => {
@@ -873,6 +881,10 @@ export function OpeningTracker({
           onMouseLeave={(e) => {
             const next = e.relatedTarget as Node | null;
             if (next && e.currentTarget.contains(next)) return;
+            if (hoverDebounceRef.current !== null) {
+              window.clearTimeout(hoverDebounceRef.current);
+              hoverDebounceRef.current = null;
+            }
             setPreviewSan(null);
             setHoverAnimationHints(null);
           }}
