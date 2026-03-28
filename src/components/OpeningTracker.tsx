@@ -135,6 +135,8 @@ type OpeningTrackerProps = {
   bookmarkPreview?: { fen: string; posHash: string; sideToMove: "w" | "b" } | null;
   /** When true, another tab holds the DB; hide next-move rows. */
   dbInUse?: boolean;
+  /** When false, main column uses full width (bookmark strip collapsed). */
+  bookmarkBarVisible?: boolean;
 };
 
 export function OpeningTracker({
@@ -150,6 +152,7 @@ export function OpeningTracker({
   onBookmarkToggle,
   bookmarkPreview,
   dbInUse = false,
+  bookmarkBarVisible = true,
 }: OpeningTrackerProps) {
   const loc = useExplorerLocation();
   const [posData, setPosData] = useState<PositionData | null>(null);
@@ -678,7 +681,7 @@ export function OpeningTracker({
   const moveTableColSpan = 2 + (hasResults ? 2 : 0);
 
   return (
-    <main class="explorer">
+    <main class={`explorer ${bookmarkBarVisible ? "" : "explorer--bookmark-collapsed"}`}>
       <div class="explorer-title-row">
         <div class="explorer-title-left">
           <span class="explorer-title">Opening Tracker</span>

@@ -32,6 +32,7 @@ import { useStorageDbState } from "./useStorageDbState";
 
 const DEFAULT_ELO_RANGE: EloRange = [0, 3500];
 const DB_RESET_ON_STARTUP_FLAG = "openingTracker:resetDbOnStartup";
+const BOOKMARK_BAR_VISIBLE_KEY = "openingExplorer:bookmarkBarVisible";
 
 type WorkerResponse =
   | {
@@ -77,6 +78,13 @@ export function App() {
     posHash: string;
     sideToMove: "w" | "b";
   } | null>(null);
+  const [bookmarkBarVisible, setBookmarkBarVisible] = useState(() => {
+    try {
+      return localStorage.getItem(BOOKMARK_BAR_VISIBLE_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
 
   const dbReadyRef = useRef(false);
   const importBusyRef = useRef(false);
@@ -127,6 +135,14 @@ export function App() {
         }
       });
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(BOOKMARK_BAR_VISIBLE_KEY, bookmarkBarVisible ? "1" : "0");
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [bookmarkBarVisible]);
 
   useEffect(() => {
     if (!bootDone) return;
@@ -583,6 +599,7 @@ export function App() {
         onBookmarkToggle={bumpBookmarks}
         bookmarkPreview={bookmarkPreview}
         dbInUse={storageDb.inUse}
+        bookmarkBarVisible={bookmarkBarVisible}
       />
       <BookmarkSidebar
         dateBoundsSec={dateBoundsSec}
@@ -594,6 +611,8 @@ export function App() {
         onBookmarksChanged={bumpBookmarks}
         onPreviewChange={setBookmarkPreview}
         dbInUse={storageDb.inUse}
+        expanded={bookmarkBarVisible}
+        onToggleExpanded={() => setBookmarkBarVisible((v) => !v)}
       />
     </div>
   );

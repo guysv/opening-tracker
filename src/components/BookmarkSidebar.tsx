@@ -52,6 +52,9 @@ type BookmarkSidebarProps = {
   onPreviewChange: (preview: { fen: string; posHash: string; sideToMove: "w" | "b" } | null) => void;
   /** When true, another tab holds the DB; do not list bookmarks. */
   dbInUse?: boolean;
+  /** When false, panel is a narrow strip with only the toggle. */
+  expanded?: boolean;
+  onToggleExpanded: () => void;
 };
 
 export function BookmarkSidebar({
@@ -64,6 +67,8 @@ export function BookmarkSidebar({
   onBookmarksChanged,
   onPreviewChange,
   dbInUse = false,
+  expanded = true,
+  onToggleExpanded,
 }: BookmarkSidebarProps) {
   const explorerLoc = useExplorerLocation();
   const replay = useMemo(() => replayMoves(explorerLoc.via), [explorerLoc.via]);
@@ -166,6 +171,10 @@ export function BookmarkSidebar({
   }, [onPreviewChange]);
 
   useEffect(() => {
+    if (!expanded) onPreviewChange(null);
+  }, [expanded, onPreviewChange]);
+
+  useEffect(() => {
     if (renamingFragment == null) return;
     const el = renameInputRef.current;
     if (!el) return;
@@ -212,8 +221,23 @@ export function BookmarkSidebar({
   }
 
   return (
-    <aside class="bookmark-sidebar" aria-label="Bookmarked positions">
-      <h2 class="bookmark-sidebar-title">Bookmarks</h2>
+    <aside
+      class={`bookmark-sidebar ${expanded ? "" : "bookmark-sidebar--collapsed"}`}
+      aria-label="Bookmarked positions"
+    >
+      <div class="bookmark-sidebar-header">
+        <button
+          type="button"
+          class="bookmark-sidebar-toggle"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          aria-label={expanded ? "Hide bookmarks panel" : "Show bookmarks panel"}
+          title={expanded ? "Hide bookmarks panel" : "Show bookmarks panel"}
+        >
+          <span aria-hidden="true">{expanded ? "◀" : "▶"}</span>
+        </button>
+        <h2 class="bookmark-sidebar-title">Bookmarks</h2>
+      </div>
       {loading ? (
         <p class="bookmark-sidebar-status">Loading…</p>
       ) : cards.length === 0 ? (

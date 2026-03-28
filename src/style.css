@@ -57,6 +57,66 @@ body {
   z-index: 2;
 }
 
+.bookmark-sidebar--collapsed {
+  width: 40px;
+  padding: 0.75rem 0.35rem;
+}
+
+.bookmark-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.bookmark-sidebar--collapsed .bookmark-sidebar-header {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.bookmark-sidebar-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.65rem;
+  line-height: 1;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.bookmark-sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.bookmark-sidebar-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.bookmark-sidebar--collapsed .bookmark-sidebar-title {
+  display: none;
+}
+
+.bookmark-sidebar--collapsed .bookmark-sidebar-status,
+.bookmark-sidebar--collapsed .bookmark-card-list {
+  display: none;
+}
+
 .bookmark-sidebar-title {
   font-size: 0.78rem;
   font-weight: 600;
@@ -64,6 +124,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .bookmark-sidebar-status {
@@ -1078,6 +1139,10 @@ button:hover {
   flex-direction: column;
   gap: 1rem;
   overflow: hidden;
+}
+
+.explorer--bookmark-collapsed {
+  margin-right: 40px;
 }
 
 .explorer-title-row {
