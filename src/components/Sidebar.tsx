@@ -178,12 +178,12 @@ export function Sidebar({
               >
                 <div class="player-card-top">
                   <span class="player-card-name">{p.username}</span>
-                  <span class="player-card-gamecount">
-                    {p.gameCount} game{p.gameCount === 1 ? "" : "s"}
-                  </span>
                 </div>
                 <div class="player-card-meta">
                   <span>{formatArchiveSpan(p.minArchivePath, p.maxArchivePath)}</span>
+                  <span class="player-card-gamecount">
+                    {p.gameCount} game{p.gameCount === 1 ? "" : "s"}
+                  </span>
                 </div>
                 <div class="player-card-sync">
                   Last sync: {formatLastSync(p.lastSyncAt)}
