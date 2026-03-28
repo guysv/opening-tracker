@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.9.5
+
+- Add date range filtering for games and related UI enhancements.
+- Improve imports with queue management and clearer import UI.
+- Encode move sequences in game URLs for sharing and deep links.
+- Refine analyze link styling and accessibility.
+- Add a collapsible bookmark sidebar with persisted expand/collapse state.
+- Refresh explorer filters, header layout, and CSS for overflow and alignment.
+
 ## 0.9.4
 
 - Coordinate SQLite database ownership across tabs so only one tab holds the connection; show clear feedback when the database is in use elsewhere.
