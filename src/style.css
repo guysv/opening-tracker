@@ -483,6 +483,14 @@ body {
   padding: 0.4rem 0.45rem;
   font-size: 0.7rem;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-player-form-row--controls button svg {
+  display: block;
+  flex-shrink: 0;
 }
 
 .add-player-cancel {
