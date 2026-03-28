@@ -694,10 +694,18 @@ body {
 
 .sidebar-clear-db {
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(239, 68, 68, 0.2) !important;
+  border: 1px solid rgba(239, 68, 68, 0.5) !important;
+  color: #fca5a5 !important;
   font-size: 0.72rem;
   padding: 0.4rem 0.45rem;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sidebar-clear-db:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.32) !important;
+  border-color: rgba(248, 113, 113, 0.65) !important;
+  color: #fecaca !important;
 }
 
 .sidebar-clear-db:disabled {
@@ -876,8 +884,26 @@ button:hover {
   font-size: 0.78rem;
 }
 
-.storage-widget-download {
+.storage-widget-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 0.35rem;
   margin-top: 0.12rem;
+  align-items: stretch;
+}
+
+.storage-widget-actions .storage-widget-download,
+.storage-widget-actions .sidebar-clear-db {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-top: 0;
+  padding: 0.26rem 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+.storage-widget-download {
   padding: 0.26rem 0.42rem;
   font-size: 0.7rem;
   border: 1px solid rgba(255, 255, 255, 0.15);

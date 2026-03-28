@@ -442,23 +442,15 @@ export function Sidebar({
         </div>
       </div>
 
-      <button
-        type="button"
-        class="sidebar-clear-db"
-        onClick={onClear}
-        disabled={!canDownload}
-      >
-        Clear Database
-      </button>
-
-      <p class="sidebar-status">{status}</p>
-
       <StorageEstimatePanel
         state={storageState}
         downloading={downloading}
         canDownload={canDownload}
         inUse={inUse}
         onDownload={onDownloadStorage}
+        onClear={onClear}
+        canClear={canDownload}
+        status={status}
       />
     </aside>
   );

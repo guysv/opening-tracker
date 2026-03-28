@@ -17,6 +17,9 @@ export type StorageEstimatePanelProps = {
   canDownload: boolean;
   inUse: boolean;
   onDownload: () => void;
+  onClear: () => void;
+  canClear: boolean;
+  status: string;
 };
 
 export function StorageEstimatePanel({
@@ -25,10 +28,14 @@ export function StorageEstimatePanel({
   canDownload,
   inUse,
   onDownload,
+  onClear,
+  canClear,
+  status,
 }: StorageEstimatePanelProps) {
   return (
     <section class="storage-widget" aria-live="polite">
       <h3 class="storage-widget-title">Database info</h3>
+      <p class="sidebar-status">{status}</p>
       {state.status === "loading" && (
         <p class="storage-widget-value storage-widget-muted">Measuring…</p>
       )}
@@ -52,14 +59,24 @@ export function StorageEstimatePanel({
             <span class="storage-widget-mono">—</span>
           </div>
         )}
-        <button
-          class="storage-widget-download"
-          type="button"
-          onClick={onDownload}
-          disabled={downloading || !canDownload}
-        >
-          {downloading ? "Exporting…" : "Download .db"}
-        </button>
+        <div class="storage-widget-actions">
+          <button
+            class="storage-widget-download"
+            type="button"
+            onClick={onDownload}
+            disabled={downloading || !canDownload}
+          >
+            {downloading ? "Exporting…" : "Download .db"}
+          </button>
+          <button
+            type="button"
+            class="sidebar-clear-db"
+            onClick={onClear}
+            disabled={!canClear}
+          >
+            Clear Database
+          </button>
+        </div>
       </div>
     </section>
   );
