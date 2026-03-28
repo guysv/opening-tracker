@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.9.4
+
+- Coordinate SQLite database ownership across tabs so only one tab holds the connection; show clear feedback when the database is in use elsewhere (`isDbInUseError` and related handling).
+- Gate bookmark sidebar, opening explorer, and storage actions when the database is unavailable or locked; storage panel reflects in-use state and avoids conflicting downloads.
+- Refresh sidebar layout, player card styling, and related UI polish.
+
 ## 0.9.3
 
 - Add bookmark hover previews in the opening explorer and improve board interaction polish.
