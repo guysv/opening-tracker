@@ -36,6 +36,9 @@ const DB_IN_USE_PATTERNS = [
   "createSyncAccessHandle",
   "Access Handles cannot be created",
   "another open Access Handle or Writable stream",
+  /** OPFS: thrown when sync access handle is still held (e.g. other tab); not matched → no "Acquire" UI. */
+  "NoModificationAllowedError",
+  "No modification allowed",
 ];
 
 export function isDbInUseError(errorOrMessage: unknown): boolean {
