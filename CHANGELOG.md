@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.9.7
+
+- Add a development-only mobile logging endpoint (`POST /__dev/log`) so device logs appear on the dev machine.
+- Surface clearer messages when database access is restricted.
+- Improve hover behavior and move row preview in the opening tracker.
+- Show a loading overlay while the database initializes in the mobile shell.
+- Refine mobile navigation, including default tab handling and related fixes.
+
 ## 0.9.6
 
 - Add a mobile shell and touch-oriented navigation for smaller screens.
