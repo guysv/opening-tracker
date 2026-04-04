@@ -32,6 +32,8 @@ function syncTabQueryParam(tab: MobileTabId, defaultWhenOmitted: MobileTabId) {
 type MobileShellProps = {
   /** When `?tab=` is absent, which tab the URL implies (e.g. DB until at least one player exists). */
   defaultTabWhenOmitted: MobileTabId;
+  /** While true, the Explorer tab shows a semi-transparent loading veil until IndexedDB init finishes. */
+  dbLoading?: boolean;
   /** Desktop left column: import, players, storage (`Sidebar`). */
   sideView: ComponentChild;
   /** Main explorer: board + moves (`OpeningTracker`). */
@@ -52,6 +54,7 @@ const TABS: { id: MobileTabId; label: string }[] = [
  */
 export function MobileShell({
   defaultTabWhenOmitted,
+  dbLoading = false,
   sideView,
   explorer,
   bookmarks,
@@ -139,7 +142,19 @@ export function MobileShell({
           hidden={tab !== "explorer"}
           class="layout-mobile-panel"
         >
-          {explorer}
+          <div class="layout-mobile-explorer-shell">
+            {explorer}
+            {tab === "explorer" && dbLoading ? (
+              <div
+                class="layout-mobile-db-loading-overlay"
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+              >
+                <span class="layout-mobile-db-loading-label">Loading database…</span>
+              </div>
+            ) : null}
+          </div>
         </section>
         <section
           id="layout-mobile-panel-bookmarks"

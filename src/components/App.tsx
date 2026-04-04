@@ -572,6 +572,7 @@ export function App() {
     return (
       <MobileShell
         defaultTabWhenOmitted={bootDone && players.length === 0 ? "db" : "explorer"}
+        dbLoading={!bootDone}
         sideView={
           <Sidebar
             importActivity={importActivity}
