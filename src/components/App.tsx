@@ -571,6 +571,7 @@ export function App() {
   if (preferTouchShell) {
     return (
       <MobileShell
+        defaultTabWhenOmitted={bootDone && players.length === 0 ? "db" : "explorer"}
         sideView={
           <Sidebar
             importActivity={importActivity}
