@@ -705,7 +705,7 @@ export function OpeningTracker({
   const hasResults = moves.some((m) => m.wins + m.draws + m.losses > 0);
   const maxGames = moves.reduce((max, m) => Math.max(max, m.games), 0);
   const moveTableColSpan = 2 + (hasResults ? 2 : 0);
-  const mobilePeekThenGo = touchShell && loc.via.length > 0;
+  const mobilePeekThenGo = touchShell;
 
   return (
     <main class={`explorer ${bookmarkBarVisible ? "" : "explorer--bookmark-collapsed"}`}>
