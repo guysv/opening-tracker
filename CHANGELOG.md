@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.9.8
+
+- Enhance mobile bookmark navigation using the tab API.
+- Improve default tab logic in the mobile shell.
+
 ## 0.9.7
 
 - Add a development-only mobile logging endpoint (`POST /__dev/log`) so device logs appear on the dev machine.
