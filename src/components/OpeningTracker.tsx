@@ -1,5 +1,5 @@
 import { Fragment } from "preact";
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import pkg from "../../package.json";
 
 import { useExplorerLocation } from "../hooks/useExplorerLocation";
@@ -222,6 +222,15 @@ export function OpeningTracker({
     setPreviewSan(san);
   };
 
+  const clearMoveRowPreview = useCallback(() => {
+    if (hoverDebounceRef.current !== null) {
+      window.clearTimeout(hoverDebounceRef.current);
+      hoverDebounceRef.current = null;
+    }
+    setPreviewSan(null);
+    setHoverAnimationHints(null);
+  }, []);
+
   const handleMoveRowEnter = (san: string) => {
     if (hoverDebounceRef.current !== null) {
       window.clearTimeout(hoverDebounceRef.current);
@@ -241,6 +250,7 @@ export function OpeningTracker({
   const posHash = replay.posHash;
 
   const viaKey = loc.via.join("\0");
+
   const bookmarkFragment = useMemo(
     () => buildFragment(replay.posHash, loc.via, colorFilter),
     [replay.posHash, viaKey, colorFilter],
@@ -282,13 +292,8 @@ export function OpeningTracker({
   }, [bookmarkAddMode, starred]);
 
   useEffect(() => {
-    setPreviewSan(null);
-    setHoverAnimationHints(null);
-    if (hoverDebounceRef.current !== null) {
-      window.clearTimeout(hoverDebounceRef.current);
-      hoverDebounceRef.current = null;
-    }
-  }, [viaKey]);
+    clearMoveRowPreview();
+  }, [viaKey, clearMoveRowPreview]);
 
   useEffect(() => {
     setBreadcrumbPreviewPly(null);
@@ -653,10 +658,12 @@ export function OpeningTracker({
   }, [loc.via, moves, replay.error, replay.sideToMove, sfError, sfEval, sfLoading]);
 
   function handleMoveClick(move: AggregatedMove) {
+    clearMoveRowPreview();
     navigateTo(move.fenHashAfter, [...loc.via, move.san], colorFilter);
   }
 
   function handleBreadcrumbClick(plyIndex: number) {
+    clearMoveRowPreview();
     if (plyIndex < 0) {
       navigateTo(startPositionHash(), [], colorFilter);
     } else {
@@ -901,12 +908,7 @@ export function OpeningTracker({
           onMouseLeave={(e) => {
             const next = e.relatedTarget as Node | null;
             if (next && e.currentTarget.contains(next)) return;
-            if (hoverDebounceRef.current !== null) {
-              window.clearTimeout(hoverDebounceRef.current);
-              hoverDebounceRef.current = null;
-            }
-            setPreviewSan(null);
-            setHoverAnimationHints(null);
+            clearMoveRowPreview();
           }}
         >
           {replay.error ? (
@@ -937,10 +939,17 @@ export function OpeningTracker({
                     <Fragment key={m.san}>
                       <tr
                         class={`moves-row ${previewSan === m.san ? "moves-row--preview" : ""} ${blunderRow ? "moves-row--blunder" : ""}`}
-                        onClick={() =>
-                          mobilePeekThenGo ? applyMovePreviewForSan(m.san) : handleMoveClick(m)
+                        onClick={() => {
+                          if (mobilePeekThenGo) {
+                            if (previewSan === m.san) clearMoveRowPreview();
+                            else applyMovePreviewForSan(m.san);
+                          } else {
+                            handleMoveClick(m);
+                          }
+                        }}
+                        onMouseEnter={
+                          mobilePeekThenGo ? undefined : () => handleMoveRowEnter(m.san)
                         }
-                        onMouseEnter={() => handleMoveRowEnter(m.san)}
                       >
                         <td class="moves-san">
                           <span class="moves-san-name">{m.san}</span>

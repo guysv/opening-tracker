@@ -1936,8 +1936,11 @@ button:hover {
   transition: width 0.2s ease;
 }
 
-.moves-row:hover .result-bar {
-  width: 100% !important;
+/* Only real pointers: touch keeps :hover stuck on the tapped row, which broke bar width after deselect. */
+@media (hover: hover) and (pointer: fine) {
+  .moves-row:hover .result-bar {
+    width: 100% !important;
+  }
 }
 
 .result-bar-mate-win {
