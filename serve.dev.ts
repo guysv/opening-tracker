@@ -1,6 +1,13 @@
 const PORT = Number(process.env.OT_DEV_PORT) || 3200;
 const HOST = process.env.OT_DEV_HOST;
 
+/** Dev-only client logging (see `.cursor/skills/mobile-debug`). */
+const corsDevLog = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+} as const;
+
 const server = Bun.serve({
   port: PORT,
   ...(HOST ? { hostname: HOST } : {}),
@@ -20,6 +27,35 @@ const server = Bun.serve({
         }),
         { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } },
       );
+    }
+
+    if (url.pathname === "/__dev/log") {
+      if (req.method === "OPTIONS") {
+        return new Response(null, { headers: corsDevLog });
+      }
+      if (req.method === "POST") {
+        try {
+          const ct = req.headers.get("Content-Type") ?? "";
+          const ua = req.headers.get("User-Agent") ?? "";
+          const raw = await req.text();
+          const iso = new Date().toISOString();
+          let line = `[__dev/log] ${iso} ua=${JSON.stringify(ua.slice(0, 120))}`;
+          if (ct.includes("application/json")) {
+            try {
+              line += ` ${JSON.stringify(JSON.parse(raw))}`;
+            } catch {
+              line += ` json-parse-fail ${raw.slice(0, 8000)}`;
+            }
+          } else {
+            line += ` ${raw.slice(0, 8000)}`;
+          }
+          console.log(line);
+        } catch (e) {
+          console.warn("[__dev/log] handler:", e instanceof Error ? e.message : String(e));
+        }
+        return new Response(null, { status: 204, headers: corsDevLog });
+      }
+      return new Response("Method not allowed", { status: 405, headers: corsDevLog });
     }
 
     const result = await Bun.build({
