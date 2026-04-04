@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.9.6
+
+- Add a mobile shell and touch-oriented navigation for smaller screens.
+- Improve move animation handling on the board and in the opening tracker.
+- Refine sidebar and storage layout, button icons, and player card sizing.
+
 ## 0.9.5
 
 - Add date range filtering for games and related UI enhancements.
