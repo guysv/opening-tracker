@@ -571,7 +571,9 @@ export function App() {
   if (preferTouchShell) {
     return (
       <MobileShell
-        defaultTabWhenOmitted={bootDone && players.length === 0 ? "db" : "explorer"}
+        defaultTabWhenOmitted={
+          players.length === 0 || storageDb.inUse ? "db" : "explorer"
+        }
         dbLoading={!bootDone}
         sideView={
           <Sidebar
