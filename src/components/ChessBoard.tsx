@@ -259,15 +259,15 @@ export function ChessBoard({
                     const fromDisplayF = flipped ? 7 - anim.from.f : anim.from.f;
                     const toDisplayR = flipped ? 7 - anim.to.r : anim.to.r;
                     const toDisplayF = flipped ? 7 - anim.to.f : anim.to.f;
-                    const dx = (toDisplayF - fromDisplayF) * SQUARE_SIZE;
-                    const dy = (toDisplayR - fromDisplayR) * SQUARE_SIZE;
+                    const df = toDisplayF - fromDisplayF;
+                    const dr = toDisplayR - fromDisplayR;
                     return (
                       <span
                         key={anim.id}
                         class={`board-piece board-piece--moving ${WHITE_PIECES.has(anim.piece) ? "board-piece--white" : "board-piece--black"}`}
                         style={{
-                          "--move-dx": `${dx}px`,
-                          "--move-dy": `${dy}px`,
+                          "--move-dx": `calc(${df} * var(--board-sq, ${SQUARE_SIZE}px))`,
+                          "--move-dy": `calc(${dr} * var(--board-sq, ${SQUARE_SIZE}px))`,
                           "--move-ms": `${MOVE_PREVIEW_ANIM_MS}ms`,
                         }}
                       >

@@ -1177,10 +1177,20 @@ button:hover {
   height: 100%;
   min-height: 0;
   padding: 1.5rem 2rem;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "ex-title ex-title ex-title"
+    "ex-crumb ex-crumb ex-crumb"
+    "ex-left ex-filt ex-right"
+    "ex-main ex-main ex-main";
   gap: 1rem;
   overflow: hidden;
+}
+
+.explorer-header {
+  display: contents;
 }
 
 .explorer--bookmark-collapsed {
@@ -1188,12 +1198,12 @@ button:hover {
 }
 
 .explorer-title-row {
+  grid-area: ex-title;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem 1.5rem;
   flex-wrap: wrap;
-  flex-shrink: 0;
 }
 
 .explorer-title-left {
@@ -1220,12 +1230,12 @@ button:hover {
 /* breadcrumbs */
 
 .explorer-breadcrumbs {
+  grid-area: ex-crumb;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.15rem;
   font-size: 0.9rem;
-  flex-shrink: 0;
 }
 
 .breadcrumb {
@@ -1259,37 +1269,30 @@ button:hover {
   margin: 0 0.1rem;
 }
 
-/* header row */
-
-.explorer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem 1.25rem;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
+/* toolbar (left / right); date+Elo live in .explorer-header-filters between them on desktop */
 
 .explorer-header-filters {
+  grid-area: ex-filt;
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 1rem 1.25rem;
-  /* basis 0 so this column reliably absorbs free space between left and right */
-  flex: 1 1 0%;
   min-width: 0;
 }
 
 .explorer-header-left {
+  grid-area: ex-left;
   display: flex;
   align-items: center;
   gap: 1rem;
 }
 
 .explorer-header-right {
+  grid-area: ex-right;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
   flex-shrink: 0;
 }
@@ -1474,10 +1477,11 @@ button:hover {
 /* body: board + moves side by side */
 
 .explorer-body {
+  grid-area: ex-main;
   display: flex;
+  flex-direction: row;
   gap: 2rem;
   align-items: stretch;
-  flex: 1;
   min-height: 0;
   overflow: hidden;
 }
@@ -1713,7 +1717,7 @@ button:hover {
   padding: 0.55rem 0.6rem;
   font-size: 0.95rem;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: 0.35rem;
 }
@@ -1721,6 +1725,42 @@ button:hover {
 .moves-san-name {
   font-weight: 600;
   color: var(--primary);
+}
+
+.moves-san-eval-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: nowrap;
+  line-height: 1.25;
+}
+
+.moves-nav-arrow-btn {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(96, 165, 250, 0.55);
+  border-radius: 4px;
+  background: rgba(37, 99, 235, 0.35);
+  color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  vertical-align: middle;
+}
+
+.moves-nav-arrow-btn:hover {
+  background: rgba(59, 130, 246, 0.5);
+  border-color: rgba(147, 197, 253, 0.65);
+}
+
+.moves-nav-arrow-btn:active {
+  background: rgba(29, 78, 216, 0.55);
 }
 
 .moves-san-eval {
@@ -1934,4 +1974,235 @@ button:hover {
 
 .th-right {
   text-align: right;
+}
+
+/* ─── touch shell (`.layout-mobile`) — tabbed; see `MobileShell`, `usePreferTouchShell` ─── */
+
+.layout-mobile {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.layout-mobile-tabs {
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  gap: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface);
+}
+
+.layout-mobile-tab {
+  flex: 1;
+  margin: 0;
+  padding: 0.5rem 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.2;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.layout-mobile-tab:hover {
+  filter: brightness(1.06);
+}
+
+.layout-mobile-tab--active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.layout-mobile-tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.layout-mobile-panels {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* `hidden` on tabpanels must win over `display: flex` (author CSS beats UA [hidden] otherwise). */
+.layout-mobile-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-mobile-panel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-mobile-panel[hidden] {
+  display: none !important;
+}
+
+.layout-mobile .sidebar {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  height: auto;
+  border-right: none;
+  border-bottom: none;
+}
+
+.layout-mobile .explorer {
+  margin-left: 0;
+  margin-right: 0;
+  flex: 1 1 0%;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  padding: 0.65rem 0.75rem;
+  gap: 0.45rem;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "mob-title mob-title"
+    "mob-crumb mob-crumb"
+    "mob-left mob-right"
+    "mob-board mob-board"
+    "mob-filt mob-filt"
+    "mob-moves mob-moves";
+  container-type: inline-size;
+  container-name: mobile-explorer;
+  --board-sq: max(
+    26px,
+    calc((100cqw - 2.5rem - 0.65rem - 1.5rem - 4px) / 8)
+  );
+}
+
+.layout-mobile .explorer-title-row {
+  grid-area: mob-title;
+}
+
+.layout-mobile .explorer-breadcrumbs {
+  grid-area: mob-crumb;
+}
+
+.layout-mobile .explorer-header-left {
+  grid-area: mob-left;
+}
+
+.layout-mobile .explorer-header-right {
+  grid-area: mob-right;
+  justify-self: end;
+}
+
+.layout-mobile .explorer-header-filters {
+  grid-area: mob-filt;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  justify-content: stretch;
+  gap: 0.35rem 0.5rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.layout-mobile .elo-filter,
+.layout-mobile .date-filter {
+  flex: 1 1 0%;
+  min-width: 0;
+  width: auto;
+  max-width: none;
+}
+
+.layout-mobile .explorer-body {
+  display: contents;
+}
+
+@supports not (container-type: inline-size) {
+  .layout-mobile .explorer {
+    --board-sq: max(26px, calc((100vw - 1.5rem - 2.5rem - 0.65rem - 1.5rem - 4px) / 8));
+  }
+}
+
+.layout-mobile .explorer--bookmark-collapsed {
+  margin-right: 0;
+}
+
+.layout-mobile .bookmark-sidebar,
+.layout-mobile .bookmark-sidebar.bookmark-sidebar--collapsed {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  height: auto;
+  border-left: none;
+  border-top: none;
+  padding: 0.85rem 1rem;
+}
+
+.layout-mobile .bookmark-sidebar-toggle {
+  display: none;
+}
+
+.layout-mobile .board-column {
+  grid-area: mob-board;
+  align-self: center;
+  justify-self: center;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  justify-content: center;
+}
+
+.layout-mobile .eval-bar-wrap {
+  width: 2.5rem;
+  flex-shrink: 0;
+}
+
+.layout-mobile .board-piece {
+  font-size: calc(var(--board-sq) * 0.58);
+  line-height: 1;
+}
+
+.layout-mobile .board-sq {
+  width: var(--board-sq);
+  height: var(--board-sq);
+}
+
+.layout-mobile .board-file-label {
+  width: var(--board-sq);
+}
+
+.layout-mobile .eval-bar-track {
+  height: calc(8 * var(--board-sq) + 1.75rem);
+  min-height: calc(8 * var(--board-sq) + 1.75rem);
+}
+
+.layout-mobile .explorer-moves {
+  grid-area: mob-moves;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }

@@ -137,6 +137,8 @@ type OpeningTrackerProps = {
   dbInUse?: boolean;
   /** When false, main column uses full width (bookmark strip collapsed). */
   bookmarkBarVisible?: boolean;
+  /** Touch tab shell: enables peek-then-go move navigation after leaving the start position. */
+  touchShell?: boolean;
 };
 
 export function OpeningTracker({
@@ -153,6 +155,7 @@ export function OpeningTracker({
   bookmarkPreview,
   dbInUse = false,
   bookmarkBarVisible = true,
+  touchShell = false,
 }: OpeningTrackerProps) {
   const loc = useExplorerLocation();
   const [posData, setPosData] = useState<PositionData | null>(null);
@@ -192,29 +195,40 @@ export function OpeningTracker({
 
   const hoverDebounceRef = useRef<number | null>(null);
 
+  /** Apply hovered-move preview (board + eval + row highlight) immediately. */
+  const applyMovePreviewForSan = (san: string) => {
+    if (hoverDebounceRef.current !== null) {
+      window.clearTimeout(hoverDebounceRef.current);
+      hoverDebounceRef.current = null;
+    }
+    const prevPreview =
+      previewSan != null && !replay.error ? previewHoveredMove(loc.via, previewSan) : null;
+    const nextPreview = replay.error ? null : previewHoveredMove(loc.via, san);
+    if (
+      prevPreview &&
+      nextPreview &&
+      prevPreview.fromSq &&
+      prevPreview.toSq &&
+      nextPreview.fromSq &&
+      nextPreview.toSq
+    ) {
+      setHoverAnimationHints([
+        { from: prevPreview.toSq, to: prevPreview.fromSq },
+        { from: nextPreview.fromSq, to: nextPreview.toSq },
+      ]);
+    } else {
+      setHoverAnimationHints(null);
+    }
+    setPreviewSan(san);
+  };
+
   const handleMoveRowEnter = (san: string) => {
     if (hoverDebounceRef.current !== null) {
       window.clearTimeout(hoverDebounceRef.current);
     }
     hoverDebounceRef.current = window.setTimeout(() => {
       hoverDebounceRef.current = null;
-      const nextPreview = previewHoveredMove(loc.via, san);
-      if (
-        hoverPreview &&
-        nextPreview &&
-        hoverPreview.fromSq &&
-        hoverPreview.toSq &&
-        nextPreview.fromSq &&
-        nextPreview.toSq
-      ) {
-        setHoverAnimationHints([
-          { from: hoverPreview.toSq, to: hoverPreview.fromSq },
-          { from: nextPreview.fromSq, to: nextPreview.toSq },
-        ]);
-      } else {
-        setHoverAnimationHints(null);
-      }
-      setPreviewSan(san);
+      applyMovePreviewForSan(san);
     }, 60);
   };
 
@@ -270,7 +284,11 @@ export function OpeningTracker({
   useEffect(() => {
     setPreviewSan(null);
     setHoverAnimationHints(null);
-  }, [loc.via]);
+    if (hoverDebounceRef.current !== null) {
+      window.clearTimeout(hoverDebounceRef.current);
+      hoverDebounceRef.current = null;
+    }
+  }, [viaKey]);
 
   useEffect(() => {
     setBreadcrumbPreviewPly(null);
@@ -687,6 +705,7 @@ export function OpeningTracker({
   const hasResults = moves.some((m) => m.wins + m.draws + m.losses > 0);
   const maxGames = moves.reduce((max, m) => Math.max(max, m.games), 0);
   const moveTableColSpan = 2 + (hasResults ? 2 : 0);
+  const mobilePeekThenGo = touchShell && loc.via.length > 0;
 
   return (
     <main class={`explorer ${bookmarkBarVisible ? "" : "explorer--bookmark-collapsed"}`}>
@@ -746,16 +765,6 @@ export function OpeningTracker({
             />
             {displaySideToMove === "w" ? "White" : "Black"} to move
           </span>
-        </div>
-        <div class="explorer-header-filters">
-          {dateBoundsSec != null && dateRangeSec != null ? (
-            <DateRangeSlider
-              bounds={dateBoundsSec}
-              value={dateRangeSec}
-              onChange={onDateRangeChange}
-            />
-          ) : null}
-          <EloRangeSlider value={eloRange} onChange={onEloRangeChange} />
         </div>
         <div class="explorer-header-right">
           {bookmarkAddMode && !starred && !dbInUse ? (
@@ -833,6 +842,17 @@ export function OpeningTracker({
             </svg>
           </a>
         </div>
+      </div>
+
+      <div class="explorer-header-filters">
+        {dateBoundsSec != null && dateRangeSec != null ? (
+          <DateRangeSlider
+            bounds={dateBoundsSec}
+            value={dateRangeSec}
+            onChange={onDateRangeChange}
+          />
+        ) : null}
+        <EloRangeSlider value={eloRange} onChange={onEloRangeChange} />
       </div>
 
       <div class="explorer-body">
@@ -917,15 +937,47 @@ export function OpeningTracker({
                     <Fragment key={m.san}>
                       <tr
                         class={`moves-row ${previewSan === m.san ? "moves-row--preview" : ""} ${blunderRow ? "moves-row--blunder" : ""}`}
-                        onClick={() => handleMoveClick(m)}
+                        onClick={() =>
+                          mobilePeekThenGo ? applyMovePreviewForSan(m.san) : handleMoveClick(m)
+                        }
                         onMouseEnter={() => handleMoveRowEnter(m.san)}
                       >
                         <td class="moves-san">
                           <span class="moves-san-name">{m.san}</span>
-                          <span
-                            class={moveEvalDiffClass(moveEvalDiffs[m.fenHashAfter])}
-                          >
-                            {moveEvalDiffLabel(moveEvalDiffs[m.fenHashAfter])}
+                          <span class="moves-san-eval-row">
+                            <span
+                              class={moveEvalDiffClass(moveEvalDiffs[m.fenHashAfter])}
+                            >
+                              {moveEvalDiffLabel(moveEvalDiffs[m.fenHashAfter])}
+                            </span>
+                            {mobilePeekThenGo && previewSan === m.san ? (
+                              <button
+                                type="button"
+                                class="moves-nav-arrow-btn"
+                                aria-label={`Play ${m.san}`}
+                                title="Go to this position"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMoveClick(m);
+                                }}
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  stroke-width="2.25"
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <path d="M5 12h14" />
+                                  <path d="m12 5 7 7-7 7" />
+                                </svg>
+                              </button>
+                            ) : null}
                           </span>
                         </td>
                         <td class="moves-games">

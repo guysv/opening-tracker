@@ -1,7 +1,9 @@
 const PORT = Number(process.env.OT_DEV_PORT) || 3200;
+const HOST = process.env.OT_DEV_HOST;
 
 const server = Bun.serve({
   port: PORT,
+  ...(HOST ? { hostname: HOST } : {}),
   async fetch(req) {
     const url = new URL(req.url);
 
@@ -93,4 +95,8 @@ const server = Bun.serve({
   },
 });
 
-console.log(`Dev server running at http://localhost:${PORT}`);
+console.log(
+  HOST
+    ? `Dev server running at http://${HOST}:${PORT}`
+    : `Dev server running at http://localhost:${PORT}`,
+);

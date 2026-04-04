@@ -26,9 +26,12 @@ import {
 import type { QueuedImport } from "../lib/importQueue";
 import type { ImportActivitySnapshot } from "./ImportStatusPanel";
 import { BookmarkSidebar } from "./BookmarkSidebar";
+import { DesktopShell } from "./DesktopShell";
+import { MobileShell } from "./MobileShell";
 import { OpeningTracker } from "./OpeningTracker";
 import { Sidebar } from "./Sidebar";
 import { useStorageDbState } from "./useStorageDbState";
+import { usePreferTouchShell } from "../hooks/usePreferTouchShell";
 
 const DEFAULT_ELO_RANGE: EloRange = [0, 3500];
 const DB_RESET_ON_STARTUP_FLAG = "openingTracker:resetDbOnStartup";
@@ -522,6 +525,7 @@ export function App() {
   }, []);
 
   const storageDb = useStorageDbState({ onAcquireSuccess: handleDbAcquired });
+  const preferTouchShell = usePreferTouchShell();
 
   useEffect(() => {
     if (!bootDone) return;
@@ -564,8 +568,70 @@ export function App() {
     };
   }, [bootDone, gamesDataRevision, storageDb.inUse]);
 
+  if (preferTouchShell) {
+    return (
+      <MobileShell
+        sideView={
+          <Sidebar
+            importActivity={importActivity}
+            importQueue={importQueue}
+            status={status}
+            players={players}
+            disabledUsernames={disabledUsernames}
+            onImportInitial={handleImportInitial}
+            onSync={handleSync}
+            onExtend={handleExtend}
+            onDeletePlayer={handleDeletePlayer}
+            onTogglePlayer={handleToggleCard}
+            onClear={handleCleanDb}
+            storageState={storageDb.state}
+            downloading={storageDb.downloading}
+            acquiring={storageDb.acquiring}
+            onAcquireStorage={() => void storageDb.handleAcquire()}
+            onDownloadStorage={() => void storageDb.handleDownload()}
+            inUse={storageDb.inUse}
+            canDownload={storageDb.canDownload}
+          />
+        }
+        explorer={
+          <OpeningTracker
+            dateBoundsSec={dateBoundsSec}
+            dateRangeSec={dateRangeSec}
+            onDateRangeChange={setDateRangeSec}
+            eloRange={eloRange}
+            onEloRangeChange={setEloRange}
+            expandResultBars={expandResultBars}
+            gamesDataRevision={gamesDataRevision}
+            includeUsernames={includeUsernames}
+            bookmarksRevision={bookmarksRevision}
+            onBookmarkToggle={bumpBookmarks}
+            bookmarkPreview={bookmarkPreview}
+            dbInUse={storageDb.inUse}
+            bookmarkBarVisible
+            touchShell
+          />
+        }
+        bookmarks={
+          <BookmarkSidebar
+            dateBoundsSec={dateBoundsSec}
+            dateRangeSec={dateRangeSec}
+            eloRange={eloRange}
+            gamesDataRevision={gamesDataRevision}
+            includeUsernames={includeUsernames}
+            bookmarksRevision={bookmarksRevision}
+            onBookmarksChanged={bumpBookmarks}
+            onPreviewChange={setBookmarkPreview}
+            dbInUse={storageDb.inUse}
+            expanded
+            onToggleExpanded={() => {}}
+          />
+        }
+      />
+    );
+  }
+
   return (
-    <div class="layout">
+    <DesktopShell>
       <Sidebar
         importActivity={importActivity}
         importQueue={importQueue}
@@ -614,6 +680,6 @@ export function App() {
         expanded={bookmarkBarVisible}
         onToggleExpanded={() => setBookmarkBarVisible((v) => !v)}
       />
-    </div>
+    </DesktopShell>
   );
 }
