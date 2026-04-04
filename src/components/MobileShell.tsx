@@ -1,5 +1,5 @@
 import type { ComponentChild } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useState } from "preact/hooks";
 
 export type MobileTabId = "db" | "explorer" | "bookmarks";
 
@@ -40,6 +40,8 @@ type MobileShellProps = {
   explorer: ComponentChild;
   /** Desktop right bookmark strip (`BookmarkSidebar`). */
   bookmarks: ComponentChild;
+  /** Set by shell so parent can focus Explorer (e.g. after opening a bookmark). */
+  tabApiRef?: { current: { goToExplorer: () => void } | null };
 };
 
 const TABS: { id: MobileTabId; label: string }[] = [
@@ -58,6 +60,7 @@ export function MobileShell({
   sideView,
   explorer,
   bookmarks,
+  tabApiRef,
 }: MobileShellProps) {
   const [tab, setTab] = useState<MobileTabId>(() =>
     typeof window === "undefined"
@@ -101,10 +104,21 @@ export function MobileShell({
     }
   }, [defaultTabWhenOmitted]);
 
-  function selectTab(next: MobileTabId) {
-    setTab(next);
-    syncTabQueryParam(next, defaultTabWhenOmitted);
-  }
+  const selectTab = useCallback(
+    (next: MobileTabId) => {
+      setTab(next);
+      syncTabQueryParam(next, defaultTabWhenOmitted);
+    },
+    [defaultTabWhenOmitted],
+  );
+
+  useEffect(() => {
+    if (!tabApiRef) return;
+    tabApiRef.current = { goToExplorer: () => selectTab("explorer") };
+    return () => {
+      tabApiRef.current = null;
+    };
+  }, [tabApiRef, selectTab]);
 
   return (
     <div class="layout-mobile">

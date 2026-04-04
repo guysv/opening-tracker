@@ -55,6 +55,8 @@ type BookmarkSidebarProps = {
   /** When false, panel is a narrow strip with only the toggle. */
   expanded?: boolean;
   onToggleExpanded: () => void;
+  /** e.g. mobile: switch to Explorer tab after navigating to the bookmark. */
+  onOpenBookmark?: () => void;
 };
 
 export function BookmarkSidebar({
@@ -69,6 +71,7 @@ export function BookmarkSidebar({
   dbInUse = false,
   expanded = true,
   onToggleExpanded,
+  onOpenBookmark,
 }: BookmarkSidebarProps) {
   const explorerLoc = useExplorerLocation();
   const replay = useMemo(() => replayMoves(explorerLoc.via), [explorerLoc.via]);
@@ -218,6 +221,7 @@ export function BookmarkSidebar({
     if (renamingFragment === c.row.fragment) return;
     const p = parseFragment(c.row.fragment);
     navigateTo(p.posHash, p.via, p.color);
+    onOpenBookmark?.();
   }
 
   return (

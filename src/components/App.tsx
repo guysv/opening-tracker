@@ -526,6 +526,7 @@ export function App() {
 
   const storageDb = useStorageDbState({ onAcquireSuccess: handleDbAcquired });
   const preferTouchShell = usePreferTouchShell();
+  const mobileTabApiRef = useRef<{ goToExplorer: () => void } | null>(null);
 
   useEffect(() => {
     if (!bootDone) return;
@@ -574,6 +575,7 @@ export function App() {
         defaultTabWhenOmitted={
           players.length === 0 || storageDb.inUse ? "db" : "explorer"
         }
+        tabApiRef={mobileTabApiRef}
         dbLoading={!bootDone}
         sideView={
           <Sidebar
@@ -628,6 +630,7 @@ export function App() {
             dbInUse={storageDb.inUse}
             expanded
             onToggleExpanded={() => {}}
+            onOpenBookmark={() => mobileTabApiRef.current?.goToExplorer()}
           />
         }
       />
